@@ -1,18 +1,20 @@
 import gradio as gr
 import pandas as pd
-from data_processor import *
+
+import data_processor as dp
+import utils
 
 def create_dashboard():
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
-        gr.Markdown("# Business Intelligence Dashboard")
-        
-        with gr.Tab("Data Upload"):
-            # File upload and preview
-            gr.Markdown("""
+        gr.Markdown("""
             # Interactive Business Intelligence Dashboard
             ### Justin Feldman | CS5130: Final Project | Professor Lino Coria Mendoza
             """)
+        
+        # I was unfamiliar with gr.State so this was recommended by AI
+        loaded_data = gr.State({})
 
+        with gr.Tab("Data Upload"):
             # Step 1: Dataset loading section
             gr.Markdown("""
             ## Step 1: Load the Dataset
@@ -23,17 +25,55 @@ def create_dashboard():
 
             with gr.Row():
                 with gr.Column(scale=1):
-                    input_directory = gr.File(label="Upload Your File or Folder",
-                                              file_count="directory",
-                                              height=400)
+                    input_directory = gr.File(
+                        label="Upload Your File or Folder",
+                        file_count="directory",
+                        height=400
+                        )
+                    
                     load_btn = gr.Button("Load and Import Data", variant="primary", size="lg")
-                    load_status = gr.Textbox(label="Load Status", interactive=False)
+
+                    load_status = gr.Textbox(
+                        label="Load Status", 
+                        interactive=False, 
+                        lines=10
+                        )
 
             load_btn.click(
-                fn=summarize_directory,
-                inputs=[],
-                outputs=[dataset_status]
+                fn=utils.data_upload_pipeline,
+                inputs=[input_directory],
+                outputs=[load_status, loaded_data]
             )
+
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("""
+                                ## Step 2: Profile the Dataset
+                                ### Select a loaded file from the dropdown to generate a profile summary.
+                                """)
+
+                    # Dropdown populated dynamically with loaded file names
+                    profile_file_dropdown = gr.Dropdown(
+                        label="Choose Loaded Dataset",
+                        choices=[],  # Update dynamically
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+
+                    loaded_data.change(
+                        fn=utils.update_dropdown_choices,
+                        inputs=[loaded_data],
+                        outputs=[profile_file_dropdown]
+                    )
+
+                    profile_btn = gr.Button("Generate Profile", variant="secondary")
+                    profile_output = gr.Markdown(label="Profile Summary", elem_id="profile_output")
+
+                    profile_btn.click(
+                        fn=utils.profile_file,
+                        inputs=[loaded_data, profile_file_dropdown],
+                        outputs=[profile_output]
+                        )
 
         with gr.Tab("Statistics"):
             # Summary statistics and profiling
