@@ -5,7 +5,8 @@ from pathlib import Path
 # Loading Data
 SUPPORTED_EXTENSIONS = {
     ".csv": pd.read_csv,
-    ".txt": pd.read_csv,
+    # Struggled with this line for generalized delimiters, AI helped
+    ".txt": lambda f: pd.read_csv(f, sep=None, engine="python"), 
     ".tsv": lambda f: pd.read_csv(f, sep="\t"),
     ".xlsx": pd.read_excel,
     ".xls": pd.read_excel,
@@ -27,31 +28,65 @@ def summarize_directory(files):
                 unsupported.append(file.name)
     return {"supported": supported, "unsupported": unsupported}
 
-def load_files(directory):
-    directory = Path(directory)
+def load_files(files):
     loaded, failed, unsupported = {}, [], []
 
-    for file in directory.glob("*"):
-        if not file.is_file():
-            continue
-        loader = SUPPORTED_EXTENSIONS.get(file.suffix)
+    # Accept a single file or a list of files
+    if not isinstance(files, list):
+        files = [files]
+
+    for f in files:
+        # Normalize file path (supports Path, str, and Gradio TemporaryUploadedFile)
+        if hasattr(f, "path"):
+            fpath = Path(f.path)
+        else:
+            fpath = Path(f)
+
+        loader = SUPPORTED_EXTENSIONS.get(fpath.suffix)
+
         if loader is None:
-            unsupported.append(file.name)
+            unsupported.append(fpath.name)
             continue
+
         try:
-            df = loader(file)
-            loaded[file.stem] = df
+            df = loader(fpath)
+            loaded[fpath.stem] = df
         except Exception:
-            failed.append(file.name)
+            failed.append(fpath.name)
+
     return {"loaded": loaded, "failed": failed, "unsupported": unsupported}
 
+def preview_file(loaded_data, selected_file, n=5):
+    """
+    Display head and tail of selected dataset.
+    Returns a DataFrame showing first n and last n rows.
+    """
+    if not loaded_data:
+        return None
+    
+    if selected_file not in loaded_data:
+        return None
+    
+    df = loaded_data[selected_file]
+
+    # If dataframe is big enough
+    if df.shape[0] > 2 * n:
+        result = {"head": df.head(n), "tail": df.tail(n)}
+    else:
+        result = {"full": df}
+    
+    if "full" in result:
+        return result["full"]
+    else:
+        # Combine head and tail with a separator row
+        separator = pd.DataFrame(
+            [["..."] * len(df.columns)], 
+            columns=df.columns,
+            index=["..."]
+        )
+        return pd.concat([result["head"], separator, result["tail"]])
 
 # Profiling data
-def head_tail(df, n=5):
-    if df.shape[0] > 2 * n:
-        return {"head": df.head(n), "tail": df.tail(n)}
-    return {"full": df}
-
 def null_counts(df):
     return df.isnull().sum().to_dict()
 
@@ -75,9 +110,6 @@ def convert_dtype(df, columns, dtype):
     for col in columns:
         df[col] = df[col].astype(dtype)
     return df
-
-def drop_columns(df, columns):
-    return df.drop(columns=columns, errors="ignore")
 
 def drop_duplicates(df):
     return df.drop_duplicates()
