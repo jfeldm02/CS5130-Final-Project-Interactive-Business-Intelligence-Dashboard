@@ -11,20 +11,21 @@ def create_dashboard():
             ### Justin Feldman | CS5130: Final Project | Professor Lino Coria Mendoza
             """)
         
-        # I was unfamiliar with gr.State so this was recommended by AI
+        # Load 'global' state to maintain imported data across all tabs
         loaded_data = gr.State({})
         current_figure = gr.State(None)
 
         with gr.Tab("Data Upload"):
             gr.Markdown("""
                 ## Load Your Dataset(s)
-                ### Choose a folder or a single file containing data you would like to analyze. You will use this loaded data throughout the other tabs!
+                ### Choose multiple files or a single file containing data you would like to analyze.
                 Note: Only the following file types are supported: .csv, .tsv, .xlsx, 
                 .xls, .json, .h5, .hdf5, .parquet, .feather
             """)
 
             with gr.Row():
                 with gr.Column(scale=1):
+                    # Loading data interface
                     input_directory = gr.File(
                         label="Upload Your File or Folder",
                         file_count="multiple",
@@ -46,9 +47,10 @@ def create_dashboard():
             """)
             with gr.Row():
                 with gr.Column(scale=1):
+                    # Previewing newly loaded data interface 
                     preview_file_dropdown = gr.Dropdown(
                         label="Choose Loaded Dataset",
-                        choices=[],  # Update dynamically
+                        choices=[], 
                         allow_custom_value=False,
                         interactive=True
                     )
@@ -72,7 +74,6 @@ def create_dashboard():
                 ## Profile and Clean Your Data
                 Select a dataset to view statistics and apply cleaning operations. Changes are applied in place.
             """)
-            
             with gr.Row():
                 # Left panel: Controls
                 with gr.Column(scale=1):
@@ -101,6 +102,7 @@ def create_dashboard():
                             allow_custom_value=False,
                             interactive=True
                         )
+
                         target_dtype = gr.Dropdown(
                             label="Target Type",
                             choices=[
@@ -173,6 +175,7 @@ def create_dashboard():
                     gr.Markdown("### Column Details")
                     
                     with gr.Tabs():
+                        # Dataframe of overall stats and column-wise stats
                         with gr.Tab("Statistics"):
                             profile_output_columns = gr.DataFrame(
                                 label="Column Statistics",
@@ -579,7 +582,7 @@ def create_dashboard():
             
             with gr.Row():
                 with gr.Column(scale=1):
-                    gr.Markdown("### 🏆 Top Performers")
+                    gr.Markdown("### Top Performers")
                     top_performers_df = gr.DataFrame(
                         label="Highest Values",
                         interactive=False,
@@ -587,7 +590,7 @@ def create_dashboard():
                     )
                 
                 with gr.Column(scale=1):
-                    gr.Markdown("### 📉 Bottom Performers")
+                    gr.Markdown("### Bottom Performers")
                     bottom_performers_df = gr.DataFrame(
                         label="Lowest Values",
                         interactive=False,
@@ -598,7 +601,7 @@ def create_dashboard():
             
             with gr.Row():
                 with gr.Column(scale=1):
-                    gr.Markdown("### 📈 Trend Analysis")
+                    gr.Markdown("### Trend Analysis")
                     trend_df = gr.DataFrame(
                         label="Trend Metrics",
                         interactive=False,
@@ -606,7 +609,7 @@ def create_dashboard():
                     )
                 
                 with gr.Column(scale=1):
-                    gr.Markdown("### ⚠️ Anomalies Detected")
+                    gr.Markdown("### Anomalies Detected")
                     anomalies_df = gr.DataFrame(
                         label="Outlier Rows",
                         interactive=False,
@@ -617,7 +620,7 @@ def create_dashboard():
             
             with gr.Row():
                 with gr.Column(scale=1):
-                    gr.Markdown("### 📊 Distribution Statistics")
+                    gr.Markdown("### Distribution Statistics")
                     distribution_df = gr.DataFrame(
                         label="Statistical Summary",
                         interactive=False,
@@ -633,7 +636,12 @@ def create_dashboard():
                 interactive=False,
                 wrap=True
             )
-            
+        
+        # ==========================================
+        # Data Upload
+        # ==========================================
+
+        # Drop downs are consistent across all tabs    
         load_btn.click(
             fn=utils.data_upload_pipeline,
             inputs=[input_directory],

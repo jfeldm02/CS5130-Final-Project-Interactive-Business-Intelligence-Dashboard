@@ -20,6 +20,15 @@ SUPPORTED_EXTENSIONS = {
 }
 
 def summarize_directory(files):
+    """
+    Accumulates files that are and are not supported based on input files. 
+
+    Inputs:
+        files: .* types
+    
+    Returns:
+        str: supported and unsupported report 
+    """
     files = [Path(f) for f in files]
     supported, unsupported = [], []
     for file in files:
@@ -31,6 +40,15 @@ def summarize_directory(files):
     return {"supported": supported, "unsupported": unsupported}
 
 def load_files(files):
+    """
+    Attempts to load all input files, returning status. 
+
+    Inputs:
+        files: .* types
+    
+    Returns:
+        str: loaded, failed to load, and unsupported file report 
+    """
     loaded, failed, unsupported = {}, [], []
 
     # Accept a single file or a list of files
@@ -62,6 +80,15 @@ def preview_file(loaded_data, selected_file, n=5):
     """
     Display head and tail of selected dataset.
     Returns a DataFrame showing first n and last n rows.
+
+    Inputs:
+        loaded_data: successfully loaded files
+        selected_file: file selected from dropdown
+        n: number of head/tail lines to display 
+
+    Returns:
+        df: head/tail dataframe or full dataframe if original 
+        is not big enough 
     """
     if not loaded_data:
         return None
@@ -93,15 +120,51 @@ def preview_file(loaded_data, selected_file, n=5):
 #=========================================================================================
 
 def null_counts(df):
+    """
+    Counts number of nulls in full dataframe.
+
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        dictionary element: number of nulls to be added to dictionary
+    """
     return df.isnull().sum().to_dict()
 
 def duplicates(df):
+    """
+    Counts number of duplicates in full dataframe.
+
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        dictionary element: number of duplicates to be added to dictionary
+    """
     return df.duplicated().sum()
 
 def describe(df):
+    """
+    Full description of full dataframe.
+
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        dictionary element: description elements to be added to dictionary
+    """
     return df.describe(include="all").to_dict()
 
 def profile(df):
+    """
+    Packages values from prior functions to return. 
+
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        dictionary: shape, nulls, duplicates, description
+    """
     return {
         "shape": df.shape,
         "nulls": null_counts(df),
@@ -110,14 +173,45 @@ def profile(df):
     }
 
 def convert_dtype(df, columns, dtype):
+    """
+    Counts number of nulls in full dataframe.
+
+    Inputs:
+        df: selected dataframe
+        columns: columns of selected dataframe
+        dtype: datatype of all columns
+    
+    Returns:
+        df: same dataframe with converted datatype
+    """
     for col in columns:
         df[col] = df[col].astype(dtype)
     return df
 
 def drop_duplicates(df):
+    """
+    Drops duplicates in dataframe.
+
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        df: same dataframe with dropped duplicate values
+    """
     return df.drop_duplicates()
 
 def fill_nulls(df, columns, method="mean"):
+    """
+    Fills nulls in dataframe by column.
+
+    Inputs:
+        df: selected dataframe
+        columns: columns of selected dataframe
+        method: string input determining fill null function
+    
+    Returns:
+        dictionary element: number of nulls to be added to dictionary
+    """
     for col in columns:
         # AI made the recommendation for the pd.api.types.is_numeric_dtype check
         if method.lower() == "mean" and pd.api.types.is_numeric_dtype(df[col]):
@@ -128,6 +222,7 @@ def fill_nulls(df, columns, method="mean"):
             df[col] = df[col].fillna(df[col].mode().iloc[0])
         elif method.lower() == "random":
             if pd.api.types.is_numeric_dtype(df[col]):
+                # AI helped with lambda rules 
                 df[col] = df[col].fillna(
                     df[col].apply(lambda _: random.uniform(df[col].min(), df[col].max()))
                 )

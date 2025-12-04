@@ -16,6 +16,12 @@ def data_upload_pipeline(uploaded_paths):
     Takes uploaded file(s) or directory from Gradio,
     loads the supported datasets, and returns a status message
     and the loaded data dictionary for other tabs.
+
+    Inputs:
+        uploaded_paths: list of successfully loaded files
+
+    Returns:
+        Dropdown menu options in Gradio. 
     """
     # Ensure uploaded_paths is a list
     if isinstance(uploaded_paths, str):
@@ -62,7 +68,17 @@ def data_upload_pipeline(uploaded_paths):
             )
 
 def profile_file(loaded_data, selected_file):
-    """Returns two DataFrames: overall summary and per-column statistics."""
+    """
+    Overall summary and per-column statistics.
+    
+    Input: 
+        loaded_data: successfully loaded data
+        selected_file: specific dataset
+
+    Returns:
+        summary_df: dataframe of full df summary stats
+        col_stats_df: dataframe of columnwise summary stats
+    """
     if not loaded_data:
         return None, None
     
@@ -98,6 +114,7 @@ def profile_file(loaded_data, selected_file):
     return summary_df, col_stats_df
 
 def update_dropdown_choices(loaded_data):
+    """List of dropdown menu items."""
     return list(loaded_data.keys())
 
 #=========================================================================================
@@ -105,7 +122,17 @@ def update_dropdown_choices(loaded_data):
 #=========================================================================================
 
 def get_column_dtypes(loaded_data, selected_file):
-    """Returns DataFrame showing column names and their current data types."""
+    """
+    Shows column names and their current data types.
+    
+    Inputs: 
+        loaded_data: successfully loaded data
+        selected_file: specific file
+
+    Returns:
+        dtype_df: dataframe of each column's datatype
+
+    """
     if not loaded_data or selected_file not in loaded_data:
         return None
     
@@ -118,7 +145,20 @@ def get_column_dtypes(loaded_data, selected_file):
     return dtype_df
 
 def convert_dtype_wrapper(loaded_data, selected_file, columns, new_dtype):
-    """Convert selected columns to new data type and return updated dtype info."""
+    """
+    Convert selected columns to new data type and return updated dtype info.
+    
+    Inputs:
+        loaded_data: successfully loaded data
+        selected_file: specific file
+        columns: selected file's columns
+        new_dtype: desired updated datatype
+
+    Returns:
+        message: string detailing datatype change
+        updated_dtypes: new dataframe's datatypes
+        loaded_data: updated in place successfully loaded data
+    """
     if not loaded_data or selected_file not in loaded_data:
         return "No dataset selected.", None, loaded_data
     
@@ -140,15 +180,37 @@ def convert_dtype_wrapper(loaded_data, selected_file, columns, new_dtype):
         return f"Error converting data type: {str(e)}", None, loaded_data
 
 def update_dtype_view_and_columns(loaded_data, selected_file):
-        """Update both dtype display and column choices."""
-        dtype_df = get_column_dtypes(loaded_data, selected_file)
-        if dtype_df is not None:
-            column_choices = dtype_df["Column"].tolist()
-            return dtype_df, gr.Dropdown(choices=column_choices)
-        return None, gr.Dropdown(choices=[])
+    """
+    Update both dtype display and column choices in Statistics Tab.
+    
+    Inputs:
+        loaded_data: successfully loaded data
+        selected_file: specific file
+
+    Returns:
+        dtype_df: dataframe of datatypes
+        Dropdown updates with column options
+    """
+    dtype_df = get_column_dtypes(loaded_data, selected_file)
+    if dtype_df is not None:
+        column_choices = dtype_df["Column"].tolist()
+        return dtype_df, gr.Dropdown(choices=column_choices)
+    return None, gr.Dropdown(choices=[])
 
 def drop_duplicates_wrapper(loaded_data, selected_file):
-    """Drop duplicates from dataset."""
+    """
+    Drop duplicates from dataset.
+    
+    Inputs: 
+        loaded_data: successfully loaded data
+        selected_file: specific file
+    
+    Returns:
+        message: string of updatesto df
+        summary_df: dataframe of overall summary stats
+        col_stats_df: dataframe of columnwise summary stats
+        loaded_data: updated loaded_data
+    """
     if not loaded_data or selected_file not in loaded_data:
         return "No dataset selected.", None, None, loaded_data
     
@@ -477,7 +539,7 @@ def load_filter_columns_and_preview(loaded_data, selected_file, pending_operatio
         empty_dropdown = gr.Dropdown(choices=[])
         return (
             empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown,
-            empty_dropdown, empty_dropdown, "*Select a dataset to begin*", [], "No operations added yet"
+            empty_dropdown, None, "*Select a dataset to begin*", [], "No operations added yet"
         )
     
     columns, _ = get_column_info(loaded_data, selected_file)

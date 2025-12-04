@@ -6,14 +6,37 @@ import numpy as np
 #=========================================================================================
 
 def sort(df, columns, ascending=True):
-    """Sort dataframe by specified columns."""
+    """
+    Sorts df column.
+
+    Inputs:
+        df: selected dataframe
+        columns: selected dataframe columns
+        ascending: bool toggling ascending/descending sort
+    
+    Returns:
+        df: same dataframe sorted by column and method
+        log: string to trace df changes
+    """
     df = df.sort_values(by=columns, ascending=ascending)
     log = f"Sorted by {columns} ({'ascending' if ascending else 'descending'})"
     return df, log
 
 
 def filter_range(df, column, min_val=None, max_val=None):
-    """Filter dataframe by numeric range."""
+    """
+    Filters by range of df column.
+
+    Inputs:
+        df: selected dataframe
+        columns: selected dataframe columns
+        min_val: bottom range
+        max_val: top range 
+    
+    Returns:
+        df: same dataframe ranged by column and values
+        log: string to trace df changes
+    """
     if min_val is not None:
         df = df[df[column] >= min_val]
     if max_val is not None:
@@ -23,34 +46,87 @@ def filter_range(df, column, min_val=None, max_val=None):
 
 
 def filter_values(df, column, values):
-    """Filter dataframe to keep only specified values."""
+    """
+    Filters by unique values of df column.
+
+    Inputs:
+        df: selected dataframe
+        columns: selected dataframe columns
+        values: selected unique values
+    
+    Returns:
+        df: same dataframe filtered by column unique values
+        log: string to trace df changes
+    """
     df = df[df[column].isin(values)]
     log = f"Filtered {column} to values: {values}"
     return df, log
 
 
 def sum(df, columns):
-    """Calculate sum of specified columns (doesn't modify df)."""
+    """
+    Sums df column.
+
+    Inputs:
+        df: selected dataframe
+        columns: selected dataframe columns
+    
+    Returns:
+        df: same dataframe with sum values
+        log: string to trace df changes
+    """
     sum_result = df[columns].sum()
     log = f"Sum of {columns}: {sum_result.to_dict()}"
     return df, log
 
 
 def select_columns(df, columns):
-    """Select only specified columns."""
+    """
+    Sorts df column.
+
+    Inputs:
+        df: selected dataframe
+        columns: selected dataframe columns
+    
+    Returns:
+        df: same dataframe with column masking
+        log: string to trace df changes
+    """
     df = df[columns]
     log = f"Selected columns: {columns}"
     return df, log
 
 
 def rename_columns(df, rename_map):
-    """Rename columns according to mapping."""
+    """
+    Sorts df column.
+
+    Inputs:
+        df: selected dataframe
+        rename_map: new name mapping
+    
+    Returns:
+        df: same dataframe with new column names
+        log: string to trace df changes
+    """
     df = df.rename(columns=rename_map)
     log = f"Renamed columns: {rename_map}"
     return df, log
 
 def filter_date_range(df, column, start_date=None, end_date=None):
-    """Filter dataframe by date range."""
+    """
+    Sorts df column by date range.
+
+    Inputs:
+        df: selected dataframe
+        column: date column
+        start_date: min range
+        end_date: max range 
+    
+    Returns:
+        df: same dataframe with date range filter
+        log: string to trace df changes
+    """
     # Ensure column is datetime
     if not pd.api.types.is_datetime64_any_dtype(df[column]):
         df[column] = pd.to_datetime(df[column], errors='coerce')
@@ -70,9 +146,16 @@ def filter_date_range(df, column, start_date=None, end_date=None):
 
 def get_performers(df, value_col, label_col=None, n=5):
     """
-    Identify top and bottom performers by a numeric column.
+    Gets max/min values from specified column.
+
+    Inputs:
+        df: selected dataframe
+        value_col: selected column in selected dataframe
+        label_col: associated label column for context
+        n: number of min/max values
     
-    Returns dict with 'top' and 'bottom' DataFrames.
+    Returns:
+        dictionary: two arrays, max and min values respectively 
     """
     if not pd.api.types.is_numeric_dtype(df[value_col]):
         return None
@@ -99,7 +182,14 @@ def detect_trend(df, value_col, date_col=None):
     Detect overall trend direction using simple linear regression slope.
     
     If date_col is provided, sorts by date first.
-    Returns dict with trend direction, slope, and statistics.
+    
+    Inputs:
+        df: selected dayaframe
+        value_col: selected column of selected dataframe
+        date_col: add date column for context
+    
+    Returns: 
+        dictionary: trend direction, slope, and statistics.
     """
     if not pd.api.types.is_numeric_dtype(df[value_col]):
         return None
@@ -151,9 +241,15 @@ def detect_trend(df, value_col, date_col=None):
 
 def find_anomalies(df, value_col, threshold=2.5):
     """
-    Flag values that deviate significantly from the mean using Z-scores.
+    Flag outliers beyond a standard deviation.
+
+    Inputs:
+        df: selected dataframe
+        value_col: selected column from selected dataframe
+        threshold: standard deviation range from mean
     
-    Returns dict with anomaly count and DataFrames of high/low anomalies.
+    Returns:
+        dictionary: anomaly count and dataframes of high/low outliers.
     """
     if not pd.api.types.is_numeric_dtype(df[value_col]):
         return None
@@ -195,6 +291,13 @@ def find_anomalies(df, value_col, threshold=2.5):
 def get_distribution_stats(df, value_col):
     """
     Calculate distribution statistics for a numeric column.
+
+    Inputs:
+        df: selected dataframe
+        value_col: selected value column to analyze 
+    
+    Returns:
+        dictionary: statistics 
     """
     if not pd.api.types.is_numeric_dtype(df[value_col]):
         return None
@@ -218,8 +321,17 @@ def get_distribution_stats(df, value_col):
 def generate_all_insights(df, value_col, label_col=None, date_col=None, n_performers=5, anomaly_threshold=2.5):
     """
     Generate all insights for a single numeric column.
+
+    Inputs:
+        df: selected dataframe
+        value_col: column to analyze
+        label_col: object column to supplement
+        date_col: date column to supplement
+        n_performers: number of preview data points
+        anomaly_threshold: standard deviation range for outliers
     
-    Returns a dict containing all insight results.
+    Returns:
+        dictionary: containing all insight results
     """
     insights = {
         "column": value_col,
@@ -233,16 +345,32 @@ def generate_all_insights(df, value_col, label_col=None, date_col=None, n_perfor
 
 
 def get_numeric_columns(df):
-    """Return list of numeric column names."""
+    """
+    List of numeric column names.
+    
+    Inputs:
+        df: selected dataframe
+    
+    Returns:
+        List of numerical columns
+    """
     return df.select_dtypes(include='number').columns.tolist()
 
 
 def get_categorical_columns(df):
-    """Return list of potential label/category columns (non-numeric with reasonable cardinality)."""
+    """
+    List of potential label/category columns.
+    
+    Inputs:
+        df: dataframe
+    
+    Returns:
+        categorical: List of categorical columns that are usable for suplementary info.
+    """
     categorical = []
     for col in df.columns:
         if not pd.api.types.is_numeric_dtype(df[col]):
-            # Include if cardinality is reasonable (not too high, not too low)
+            # Include if reasonable (not too high, not too low)
             unique_count = df[col].nunique()
             if 1 < unique_count <= len(df) * 0.5:
                 categorical.append(col)
@@ -250,7 +378,15 @@ def get_categorical_columns(df):
 
 
 def get_date_columns(df):
-    """Return list of datetime columns."""
+    """
+    List of datetime columns.
+    
+    Inputs: 
+        df: selected dateframe
+    
+    Returns: 
+        date_cols: list of columns with date-like structure 
+    """
     date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
     
     # Also check for columns that might be dates stored as objects

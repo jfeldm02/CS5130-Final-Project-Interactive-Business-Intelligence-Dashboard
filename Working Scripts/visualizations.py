@@ -6,7 +6,18 @@ AGGREGATION_METHODS = ["None", "Sum", "Mean", "Count", "Median", "Min", "Max"]
 
 
 def aggregate_data(df, x_col, y_col, agg_method):
-    """Aggregate data by x column using specified method on y column."""
+    """
+    Groups column values by different methods.
+
+    Inputs:
+        df: selected dataframe
+        x_col: x-axis column
+        y_col: y-axis column
+        agg_method: various applicable methods 
+    
+    Returns:
+        aggregated: dataframe of filters columns and groups by intended methods 
+    """
     if agg_method == "None" or agg_method is None:
         return df
     
@@ -36,7 +47,23 @@ def aggregate_data(df, x_col, y_col, agg_method):
 def generate_plot(plot_type, data, x_col, y_col=None, 
                   x_label=None, y_label=None, title=None,
                   aggregation="None"):
-    """Generates various plot types with customizable labels and aggregation."""
+    """
+    Generates various plot types with customizable labels and aggregation.
+    
+    Inputs: 
+        plot_type: specified plot method
+        data: dataframe 
+        x_col: x-axis column
+        y_col: y-axis column if applicable
+        x_label: custom x-axis label
+        y_label: custom y-axis label
+        title: custom plot title 
+        aggregation: string to concat to title
+
+    Returns:
+        fig: desired figure
+
+    """
     if data is None or x_col is None:
         return None
     
