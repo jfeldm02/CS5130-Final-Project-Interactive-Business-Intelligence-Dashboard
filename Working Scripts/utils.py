@@ -2,6 +2,9 @@ from pathlib import Path
 import data_processor as dp
 import gradio as gr
 import pandas as pd
+import tempfile
+import os
+import insights
 
 #=========================================================================================
 # Data Upload Tab
@@ -23,6 +26,9 @@ def data_upload_pipeline(uploaded_paths):
     if not paths:
         return ("No valid files or directories selected.",
                 {},
+                gr.Dropdown(choices=[]),
+                gr.Dropdown(choices=[]),
+                gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
@@ -49,6 +55,10 @@ def data_upload_pipeline(uploaded_paths):
 
     # Return message + loaded data dict
     return (status_msg, loaded_result["loaded"],
+            gr.Dropdown(choices=loaded),
+            gr.Dropdown(choices=loaded),
+            gr.Dropdown(choices=loaded),
+            gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
@@ -96,7 +106,7 @@ def update_dropdown_choices(loaded_data):
     return list(loaded_data.keys())
 
 #=========================================================================================
-# Data Cleaning Tab
+# Statistics and Data Cleaning Tab
 #=========================================================================================
 
 def get_column_dtypes(loaded_data, selected_file):
@@ -191,14 +201,11 @@ def fill_nulls_wrapper(loaded_data, selected_file, columns, method):
         
         # Build message
         message = f"Filled {total_nulls_before - total_nulls_after} null values using '{method}' method\n\n"
-        message += "Per column:\n"
+        message += "Nulls Remaining Per column:\n"
         for col in columns:
             message += f"  - {col}: {nulls_before[col]} → {nulls_after[col]}\n"
         
-        # Return updated summary
-        summary_df, col_stats_df = profile_file(loaded_data, selected_file)
-        
-        return message, summary_df, col_stats_df, loaded_data
+        return message, loaded_data
     
     except Exception as e:
         return f"Error filling nulls: {str(e)}", None, None, loaded_data
@@ -207,20 +214,260 @@ def fill_nulls_wrapper(loaded_data, selected_file, columns, method):
 def get_columns_with_nulls(loaded_data, selected_file):
     """Get DataFrame of columns with null values and their counts."""
     if not loaded_data or selected_file not in loaded_data:
-        return None, []
+        return None, gr.Dropdown(choices=[])
     
     df = loaded_data[selected_file]
     null_counts = df.isnull().sum()
     columns_with_nulls = null_counts[null_counts > 0]
     
     if len(columns_with_nulls) == 0:
-        return pd.DataFrame({"Message": ["No null values found in dataset"]}), []
+        return pd.DataFrame({"Message": ["No null values found in dataset"]}), gr.Dropdown(choices=[])
     
     null_df = pd.DataFrame({
         "Column": columns_with_nulls.index,
         "Null Count": columns_with_nulls.values,
-        "Percentage": (columns_with_nulls.values / len(df) * 100).round(2)
+        "Percentage (Null Data/Total Data)": (columns_with_nulls.values / len(df) * 100).round(2)
     })
     
-    # Return both the display DataFrame and the list of column names for dropdown
-    return null_df, columns_with_nulls.index.tolist()
+    return null_df, gr.Dropdown(choices=columns_with_nulls.index.tolist())
+
+def prepare_download(loaded_data, selected_file):
+    """Prepare cleaned dataset for download."""
+    if not loaded_data or selected_file not in loaded_data:
+        return None
+    
+    df = loaded_data[selected_file]
+    
+    # Create filename with _cleaned suffix
+    if selected_file.endswith('.csv'):
+        output_filename = selected_file.replace('.csv', '_cleaned.csv')
+    elif selected_file.endswith('.xlsx'):
+        output_filename = selected_file.replace('.xlsx', '_cleaned.xlsx')
+    elif selected_file.endswith('.json'):
+        output_filename = selected_file.replace('.json', '_cleaned.json')
+    else:
+        # Default to CSV if unknown extension
+        output_filename = f"{selected_file}_cleaned.csv"
+    
+    # I didn't know about this, AI recommended it.
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, output_filename)
+    
+    # Save based on file type
+    if output_filename.endswith('.csv'):
+        df.to_csv(output_path, index=False)
+    elif output_filename.endswith('.xlsx'):
+        df.to_excel(output_path, index=False)
+    elif output_filename.endswith('.json'):
+        df.to_json(output_path, orient='records', indent=2)
+    
+    return output_path
+
+#=========================================================================================
+# Filter and Explore Tab
+#=========================================================================================
+
+def operations(loaded_data, selected_file, operations, save_name=None, preview_only=False):
+    """
+    Apply multiple operations to a dataset.
+    
+    operations is a list of dicts with structure:
+    {
+        'type': 'sort' | 'filter_range' | 'filter_values' | 'sum' | 'select_columns' | 'rename_columns',
+        'columns': [list of column names],
+        'params': {additional parameters based on operation type}
+    }
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return "No dataset selected.", None, loaded_data
+    
+    try:
+        df = loaded_data[selected_file].copy()
+        operation_log = []
+        
+        for op in operations:
+            op_type = op['type']
+            columns = op.get('columns', [])
+            params = op.get('params', {})
+            
+            if op_type == 'sort':
+                df, log = insights.sort(df, columns, params.get('ascending', True))
+                operation_log.append(log)
+            
+            elif op_type == 'filter_range':
+                df, log = insights.filter_range(
+                    df, 
+                    columns[0], 
+                    params.get('min'), 
+                    params.get('max')
+                )
+                operation_log.append(log)
+            
+            elif op_type == 'filter_values':
+                df, log = insights.filter_values(
+                    df, 
+                    columns[0], 
+                    params.get('values', [])
+                )
+                operation_log.append(log)
+            
+            elif op_type == 'sum':
+                df, log = sum(df, columns)
+                operation_log.append(log)
+            
+            elif op_type == 'select_columns':
+                df, log = insights.select_columns(df, columns)
+                operation_log.append(log)
+            
+            elif op_type == 'rename_columns':
+                df, log = insights.rename_columns(df, params.get('rename_map', {}))
+                operation_log.append(log)
+            
+            else:
+                operation_log.append(f"Unknown operation: {op_type}")
+        
+        if preview_only:
+            message = f"Preview: {len(df)} rows and {len(df.columns)} columns\n\n"
+            message += "Operations that will be applied:\n" + "\n".join(f"  - {log}" for log in operation_log)
+            message += "\n\n⚠️ This is a preview only. Click 'Apply Operations & Save' to save these changes."
+            return message, df.head(20), loaded_data
+
+        if save_name and save_name.strip():
+            # User provided a custom name
+            new_name = save_name.strip()
+            
+            # Check if name already exists
+            if new_name in loaded_data:
+                return f"Error: A dataset named '{new_name}' already exists. Choose a different name.", None, loaded_data
+        else:
+            # Use default naming with _transformed suffix
+            new_name = f"{selected_file}_transformed"
+            counter = 1
+            while new_name in loaded_data:
+                new_name = f"{selected_file}_transformed_{counter}"
+                counter += 1
+        
+        # Save the transformed dataset
+        loaded_data[new_name] = df
+        
+        message = f"Created '{new_name}' with {len(df)} rows and {len(df.columns)} columns\n\n"
+        message += "Operations applied:\n" + "\n".join(f"  - {log}" for log in operation_log)
+        
+        return message, df.head(20), loaded_data
+    
+    except Exception as e:
+        return f"Error applying operations: {str(e)}", None, loaded_data
+
+def get_column_info(loaded_data, selected_file):
+    """Get column names and types for building filters."""
+    if not loaded_data or selected_file not in loaded_data:
+        return [], {}
+    
+    df = loaded_data[selected_file]
+    columns = df.columns.tolist()
+    
+    # Get info about each column
+    column_info = {}
+    for col in columns:
+        column_info[col] = {
+            'dtype': str(df[col].dtype),
+            'is_numeric': pd.api.types.is_numeric_dtype(df[col]),
+            'unique_values': df[col].nunique(),
+            'sample_values': df[col].dropna().unique()[:10].tolist()
+        }
+    
+    return columns, column_info
+ 
+    # Load columns when dataset is selected
+def update_filter_columns(loaded_data, selected_file):
+    columns, _ = get_column_info(loaded_data, selected_file)
+    dropdown_update = gr.Dropdown(choices=columns)
+    return [dropdown_update] * 5  # Update all 5 dropdowns
+
+# Load available values for selected column
+def load_unique_values(loaded_data, selected_file, column):
+    if not loaded_data or selected_file not in loaded_data or not column:
+        return gr.Dropdown(choices=[])
+    
+    df = loaded_data[selected_file]
+    unique_vals = df[column].dropna().unique().tolist()
+    if len(unique_vals) > 100:
+        unique_vals = unique_vals[:100]
+    
+    return gr.Dropdown(choices=[str(v) for v in unique_vals])
+
+# Add rename to queue
+def add_to_rename_queue(rename_map, old_name, new_name):
+    if not old_name or not new_name:
+        return rename_map, "No renames queued" if not rename_map else "\n".join([f"{k} → {v}" for k, v in rename_map.items()])
+    
+    rename_map = rename_map.copy()
+    rename_map[old_name] = new_name
+    
+    display = "\n".join([f"{k} → {v}" for k, v in rename_map.items()])
+    return rename_map, display
+
+# Clear rename queue
+def clear_rename_queue():
+    return {}, "No renames queued"
+
+def apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord, 
+                        range_col, r_min, r_max, val_col, val_list, 
+                        rename_map, sel_cols, custom_name, preview_only=False):
+    """
+    Wrapper function that builds operations list from Gradio inputs
+    and calls the operations function.
+    """
+    operations_list = []
+    
+    # Build operations list
+    if sort_cols:
+        operations_list.append({
+            'type': 'sort',
+            'columns': sort_cols,
+            'params': {'ascending': sort_ord == "Ascending"}
+        })
+    
+    if range_col and (r_min is not None or r_max is not None):
+        operations_list.append({
+            'type': 'filter_range',
+            'columns': [range_col],
+            'params': {'min': r_min, 'max': r_max}
+        })
+    
+    if val_col and val_list:
+        # Convert string values back to original types if needed
+        df = loaded_data[selected_file]
+        original_dtype = df[val_col].dtype
+        
+        if pd.api.types.is_numeric_dtype(original_dtype):
+            try:
+                val_list = [float(v) if '.' in str(v) else int(v) for v in val_list]
+            except:
+                pass
+        
+        operations_list.append({
+            'type': 'filter_values',
+            'columns': [val_col],
+            'params': {'values': val_list}
+        })
+    
+    if rename_map:
+        operations_list.append({
+            'type': 'rename_columns',
+            'columns': [],
+            'params': {'rename_map': rename_map}
+        })
+    
+    if sel_cols:
+        operations_list.append({
+            'type': 'select_columns',
+            'columns': sel_cols,
+            'params': {}
+        })
+    
+    if not operations_list:
+        return "No operations selected.", None, loaded_data
+    
+    # Call the main operations function
+    return operations(loaded_data, selected_file, operations_list, save_name=custom_name, preview_only=preview_only)

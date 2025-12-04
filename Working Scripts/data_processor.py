@@ -2,7 +2,9 @@ import pandas as pd
 import random
 from pathlib import Path
 
-# Loading Data
+#=========================================================================================
+# Data Upload Tab
+#=========================================================================================
 SUPPORTED_EXTENSIONS = {
     ".csv": pd.read_csv,
     # Struggled with this line for generalized delimiters, AI helped
@@ -86,7 +88,10 @@ def preview_file(loaded_data, selected_file, n=5):
         )
         return pd.concat([result["head"], separator, result["tail"]])
 
-# Profiling data
+#=========================================================================================
+# Statistics and Cleaning Tab
+#=========================================================================================
+
 def null_counts(df):
     return df.isnull().sum().to_dict()
 
@@ -104,8 +109,6 @@ def profile(df):
         "describe": describe(df),
     }
 
-
-# Cleaning Data
 def convert_dtype(df, columns, dtype):
     for col in columns:
         df[col] = df[col].astype(dtype)
@@ -130,4 +133,7 @@ def fill_nulls(df, columns, method="mean"):
                 )
             else:
                 df[col] = df[col].fillna(lambda _: random.choice(df[col].dropna().unique()))
+        elif method.lower() == "remove":
+            df = df.dropna(subset=[col])
+
     return df

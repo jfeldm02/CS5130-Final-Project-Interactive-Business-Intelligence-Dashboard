@@ -71,7 +71,7 @@ def create_dashboard():
                 ## Continue to the Statistics Tab!   
             """)
 
-        with gr.Tab("Statistics"):
+        with gr.Tab("Statistics & Data Cleaning"):
             with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown("""
@@ -109,12 +109,13 @@ def create_dashboard():
                         interactive=False,
                         wrap=True
                     )
-            gr.Markdown("""
-            ## Continue to the Clean Data Tab!   
-            """)
 
-        with gr.Tab("Clean Data"):
-            # Interactive filtering
+            gr.Markdown("""
+            ## Let's clean the data and check these stats again!   
+            """)
+            gr.Markdown("---")  
+            gr.Markdown("---")  
+
             with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown("""
@@ -183,8 +184,7 @@ def create_dashboard():
                         lines=3
                     )
 
-            gr.Markdown("---")  # Separator
-    
+            gr.Markdown("---")  
             gr.Markdown("""
                 ## b. Fill Null Values
                 ### Select columns with null values and choose a fill method.
@@ -238,6 +238,7 @@ def create_dashboard():
                     - **median**: Fill with column median (numeric only)
                     - **mode**: Fill with most common value
                     - **random**: Fill with random value from column range
+                    - **remove**: Drops the row where nulls exist in the column
                     """)
                     
                     fill_nulls_btn = gr.Button("Fill Null Values", variant="primary")
@@ -248,28 +249,11 @@ def create_dashboard():
                         lines=8
                     )
             
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### Updated Dataset Summary")
-                    
-                    null_summary = gr.DataFrame(
-                        label="Overall Summary",
-                        interactive=False,
-                        wrap=True
-                    )
-                    
-                    null_col_stats = gr.DataFrame(
-                        label="Column Statistics",
-                        interactive=False,
-                        wrap=True
-                    )
-
-                    gr.Markdown("---")
-
-                    gr.Markdown("""
-                                    ### c. Drop duplicate rows if desired:
-                                    View the number duplicate rows in your dataset and remove them. 
-                                    """)
+            gr.Markdown("---")  
+            gr.Markdown("""
+                        ### c. Drop duplicate rows if desired:
+                        View the number duplicate rows in your dataset and remove them. 
+                        """)
                 
             with gr.Row():
                 with gr.Column(scale=1):
@@ -288,10 +272,13 @@ def create_dashboard():
                         interactive=False,
                         lines=5
                     )
-            
+
+            gr.Markdown("---")
+            gr.Markdown("---")
+            gr.Markdown("## Updated Dataset Summary")
+
             with gr.Row():
                 with gr.Column(scale=1):
-                    gr.Markdown("### Updated Dataset Summary")
                     
                     cleaned_summary = gr.DataFrame(
                         label="Overall Summary",
@@ -304,62 +291,205 @@ def create_dashboard():
                         interactive=False,
                         wrap=True
                     )
-    
-            # Update dtype_file_dropdown when data is loaded
-            load_btn.click(
-                fn=utils.data_upload_pipeline,
-                inputs=[input_directory],
-                outputs=[load_status,
-                        loaded_data,
-                        preview_file_dropdown,
-                        profile_file_dropdown,
-                        dtype_file_dropdown,
-                        duplicates_dropdown,
-                        null_file_dropdown] 
-            )
 
-            view_dtypes_btn.click(
-                fn=utils.update_dtype_view_and_columns,
-                inputs=[loaded_data, dtype_file_dropdown],
-                outputs=[dtype_display, columns_to_convert]
-            )
-            
-            # Convert button
-            convert_btn.click(
-                fn=utils.convert_dtype_wrapper,
-                inputs=[loaded_data, dtype_file_dropdown, columns_to_convert, target_dtype],
-                outputs=[conversion_status, dtype_display, loaded_data]
-            )
+            gr.Markdown("---")
 
-            # View columns with nulls
-            def update_null_columns(loaded_data, selected_file):
-                columns = utils.get_columns_with_nulls(loaded_data, selected_file)
-                return gr.Dropdown(choices=columns)
-            
-            view_nulls_btn.click(
-                fn=update_null_columns,
-                inputs=[loaded_data, null_file_dropdown],
-                outputs=[null_info_display, null_columns_dropdown]
-            )
-            
-            # Fill nulls button
-            fill_nulls_btn.click(
-                fn=utils.fill_nulls_wrapper,
-                inputs=[loaded_data, null_file_dropdown, null_columns_dropdown, fill_method_dropdown],
-                outputs=[null_status, null_summary, null_col_stats, loaded_data]
-            )
-            drop_dupes_btn.click(
-                fn=utils.drop_duplicates_wrapper,
-                inputs=[loaded_data, duplicates_dropdown],
-                outputs=[duplicates_status, cleaned_summary, cleaned_col_stats, loaded_data]
-            )
+            gr.Markdown("""
+                ## Download Cleaned Dataset
+                ### Export your cleaned dataset with the suffix '_cleaned' added to the filename.
+            """)
 
+            with gr.Row():
+                with gr.Column(scale=1):
+                    # Dropdown to select dataset to download
+                    download_file_dropdown = gr.Dropdown(
+                        label="Choose Dataset to Download",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    download_btn = gr.Button("Download Cleaned Dataset", variant="primary")
+                    
+                    download_output = gr.File(
+                        label="Download File",
+                        interactive=False
+                    )
+            
         with gr.Tab("Filter & Explore"):
             # Interactive filtering
-            pass
+            # Update the Filter & Transform tab
+            gr.Markdown("""
+                ## Filter and Transform Your Data
+                ### Apply multiple operations: sort, filter by range, filter by values, rename columns, and select columns.
+                **All operations create a new dataset, preserving the original.**
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    # Dataset selection
+                    filter_file_dropdown = gr.Dropdown(
+                        label="Choose Dataset",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
                     
-
-    
+                    load_columns_btn = gr.Button("Load Columns", variant="secondary")
+            
+            # Sort Section
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 1. Sort Data")
+                    
+                    sort_columns = gr.Dropdown(
+                        label="Sort by Column(s)",
+                        choices=[],
+                        multiselect=True,
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    sort_order = gr.Radio(
+                        label="Sort Order",
+                        choices=["Ascending", "Descending"],
+                        value="Ascending"
+                    )
+            
+            # Filter by Range Section
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 2. Filter by Numeric Range")
+                    
+                    range_column = gr.Dropdown(
+                        label="Column to Filter",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    with gr.Row():
+                        range_min = gr.Number(
+                            label="Minimum Value (leave empty for no minimum)",
+                            value=None
+                        )
+                        range_max = gr.Number(
+                            label="Maximum Value (leave empty for no maximum)",
+                            value=None
+                        )
+            
+            # Filter by Values Section
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 3. Filter by Specific Values")
+                    
+                    values_column = gr.Dropdown(
+                        label="Column to Filter",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    available_values = gr.Dropdown(
+                        label="Select Values to Keep",
+                        choices=[],
+                        multiselect=True,
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    load_values_btn = gr.Button("Load Available Values", size="sm")
+            
+            # Rename Columns Section
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 4. Rename Columns")
+                    gr.Markdown("*Add multiple renames by filling fields and clicking 'Add Rename'. View all queued renames below.*")
+                    
+                    with gr.Row():
+                        rename_old = gr.Dropdown(
+                            label="Column to Rename",
+                            choices=[],
+                            allow_custom_value=False,
+                            interactive=True
+                        )
+                        
+                        rename_new = gr.Textbox(
+                            label="New Name",
+                            placeholder="Enter new column name..."
+                        )
+                    
+                    add_rename_btn = gr.Button("Add Rename to Queue", size="sm", variant="secondary")
+                    
+                    rename_queue = gr.State({})  # Store rename mappings
+                    
+                    rename_queue_display = gr.Textbox(
+                        label="Queued Column Renames",
+                        value="No renames queued",
+                        interactive=False,
+                        lines=4
+                    )
+                    
+                    clear_renames_btn = gr.Button("Clear Rename Queue", size="sm")
+            
+            # Select Columns Section
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 5. Select Columns to Keep")
+                    
+                    select_columns = gr.Dropdown(
+                        label="Columns to Keep (leave empty to keep all)",
+                        choices=[],
+                        multiselect=True,
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+            
+            # Preview Results and Save
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### Result Preview (first 20 rows)")
+                    
+                    operations_preview = gr.DataFrame(
+                        label="Transformed Data Preview",
+                        interactive=False,
+                        wrap=True
+                    )
+            
+            # Save Configuration Section
+            gr.Markdown("---")
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("""
+                        ### 6. Name Your Transformed Dataset (Optional)
+                        **Leave empty** to auto-generate a name like `dataset_transformed`, or 
+                        **provide a custom name** to easily reference this configuration later.
+                    """)
+                    
+                    save_config_name = gr.Textbox(
+                        label="Custom Dataset Name (optional)",
+                        placeholder="e.g., sales_q4_cleaned, high_value_customers, etc.",
+                        interactive=True
+                    )
+            
+            # Apply Operations
+            with gr.Row():
+                with gr.Column(scale=1):
+                    apply_operations_btn = gr.Button(
+                        "Apply Operations & Save", 
+                        variant="primary",
+                        size="lg"
+                    )
+                    
+                    operations_status = gr.Textbox(
+                        label="Operations Status",
+                        interactive=False,
+                        lines=10
+                    )
+            
+            # Event handlers need to go AFTER all tabs are defined
+            # (Move these to after all your tabs are created, before demo.launch())
         
         with gr.Tab("Visualizations"):
             # Charts and graphs
@@ -369,26 +499,101 @@ def create_dashboard():
             # Automated insights
             pass
             
-            load_btn.click(
-                fn=utils.data_upload_pipeline,
-                inputs=[input_directory],
-                outputs=[load_status,
-                         loaded_data,
-                         preview_file_dropdown,
-                         profile_file_dropdown]
-            )
+        load_btn.click(
+            fn=utils.data_upload_pipeline,
+            inputs=[input_directory],
+            outputs=[load_status,
+                    loaded_data,
+                    preview_file_dropdown,
+                    profile_file_dropdown,
+                    dtype_file_dropdown,
+                    duplicates_dropdown,
+                    null_file_dropdown,
+                    download_file_dropdown,
+                    filter_file_dropdown]
+        )
 
-            preview_btn.click(
-                fn=dp.preview_file,
-                inputs=[loaded_data, preview_file_dropdown],
-                outputs=[preview_output]
-            )
+        preview_btn.click(
+            fn=dp.preview_file,
+            inputs=[loaded_data, preview_file_dropdown],
+            outputs=[preview_output]
+        )
 
-            profile_btn.click(
-                fn=utils.profile_file,
-                inputs=[loaded_data, profile_file_dropdown],
-                outputs=[profile_output_summary, profile_output_columns]
-            )
+        # Statistics handlers
+        profile_btn.click(
+            fn=utils.profile_file,
+            inputs=[loaded_data, profile_file_dropdown],
+            outputs=[profile_output_summary, profile_output_columns]
+        )
+        
+        view_dtypes_btn.click(
+            fn=utils.update_dtype_view_and_columns,
+            inputs=[loaded_data, dtype_file_dropdown],
+            outputs=[dtype_display, columns_to_convert]
+        )
+
+        convert_btn.click(
+            fn=utils.convert_dtype_wrapper,
+            inputs=[loaded_data, dtype_file_dropdown, columns_to_convert, target_dtype],
+            outputs=[conversion_status, dtype_display, loaded_data]
+        )
+        
+        view_nulls_btn.click(
+            fn=utils.get_columns_with_nulls,
+            inputs=[loaded_data, null_file_dropdown],
+            outputs=[null_info_display, null_columns_dropdown]
+        )
+        
+        fill_nulls_btn.click(
+            fn=utils.fill_nulls_wrapper,
+            inputs=[loaded_data, null_file_dropdown, null_columns_dropdown, fill_method_dropdown],
+            outputs=[null_status, cleaned_summary, cleaned_col_stats, loaded_data]  # Fixed outputs
+        )
+
+        drop_dupes_btn.click(
+            fn=utils.drop_duplicates_wrapper,
+            inputs=[loaded_data, duplicates_dropdown],
+            outputs=[duplicates_status, cleaned_summary, cleaned_col_stats, loaded_data]
+        )
+        
+        download_btn.click(
+            fn=utils.prepare_download,
+            inputs=[loaded_data, download_file_dropdown],
+            outputs=[download_output]
+        )
+        
+        # Filter & Explore handlers
+        load_columns_btn.click(
+            fn=utils.update_filter_columns,
+            inputs=[loaded_data, filter_file_dropdown],
+            outputs=[sort_columns, range_column, values_column, select_columns, rename_old]
+        )
+
+        load_values_btn.click(
+            fn=utils.load_unique_values,
+            inputs=[loaded_data, filter_file_dropdown, values_column],
+            outputs=[available_values]
+        )
+
+        add_rename_btn.click(
+            fn=utils.add_to_rename_queue,
+            inputs=[rename_queue, rename_old, rename_new],
+            outputs=[rename_queue, rename_queue_display]
+        )
+
+        clear_renames_btn.click(
+            fn=utils.clear_rename_queue,
+            inputs=[],
+            outputs=[rename_queue, rename_queue_display]
+        )
+
+        apply_operations_btn.click(
+            fn=utils.apply_all_operations,  # Fixed function name
+            inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
+                    range_column, range_min, range_max, values_column, available_values,
+                    rename_queue, select_columns, save_config_name], 
+            outputs=[operations_status, operations_preview, loaded_data]
+        )
 
     return demo
 
