@@ -445,17 +445,31 @@ def create_dashboard():
                         interactive=True
                     )
             
+            gr.Markdown("---")
+            gr.Markdown("---")
             # Preview Results and Save
             with gr.Row():
                 with gr.Column(scale=1):
-                    gr.Markdown("### Result Preview (first 20 rows)")
+                    gr.Markdown("## Result Preview (first 20 rows)")
                     
+                    preview_operations_btn = gr.Button(
+                        "Preview Transformation",
+                        variant="secondary",
+                        size="lg"
+                    )
+
                     operations_preview = gr.DataFrame(
                         label="Transformed Data Preview",
                         interactive=False,
                         wrap=True
                     )
-            
+
+                    operations_status = gr.Textbox(
+                        label="Operations Status",
+                        interactive=False,
+                        lines=10
+                    )
+
             # Save Configuration Section
             gr.Markdown("---")
             
@@ -473,23 +487,11 @@ def create_dashboard():
                         interactive=True
                     )
             
-            # Apply Operations
-            with gr.Row():
-                with gr.Column(scale=1):
                     apply_operations_btn = gr.Button(
-                        "Apply Operations & Save", 
+                        "Apply Operations & Save",
                         variant="primary",
                         size="lg"
                     )
-                    
-                    operations_status = gr.Textbox(
-                        label="Operations Status",
-                        interactive=False,
-                        lines=10
-                    )
-            
-            # Event handlers need to go AFTER all tabs are defined
-            # (Move these to after all your tabs are created, before demo.launch())
         
         with gr.Tab("Visualizations"):
             # Charts and graphs
@@ -587,12 +589,20 @@ def create_dashboard():
             outputs=[rename_queue, rename_queue_display]
         )
 
-        apply_operations_btn.click(
-            fn=utils.apply_all_operations,  # Fixed function name
+        preview_operations_btn.click(
+            fn=utils.preview_operations,
             inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
                     range_column, range_min, range_max, values_column, available_values,
-                    rename_queue, select_columns, save_config_name], 
+                    rename_queue, select_columns, save_config_name],
             outputs=[operations_status, operations_preview, loaded_data]
+        )
+
+
+        apply_operations_btn.click(
+            fn=utils.apply_all_operations,
+            inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
+                    range_column, range_min, range_max, values_column, available_values,
+                    rename_queue, select_columns, save_config_name],
         )
 
     return demo

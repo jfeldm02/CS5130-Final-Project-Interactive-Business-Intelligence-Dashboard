@@ -471,3 +471,11 @@ def apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord,
     
     # Call the main operations function
     return operations(loaded_data, selected_file, operations_list, save_name=custom_name, preview_only=preview_only)
+
+def preview_operations(loaded_data, selected_file, sort_cols, sort_ord,
+                       range_col, r_min, r_max, val_col, val_list,
+                       rename_map, sel_cols, custom_name):
+    """Preview transformation without saving."""
+    return apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord,
+                                range_col, r_min, r_max, val_col, val_list,
+                                rename_map, sel_cols, custom_name, preview_only=True)
