@@ -13,6 +13,7 @@ def create_dashboard():
         
         # I was unfamiliar with gr.State so this was recommended by AI
         loaded_data = gr.State({})
+        current_figure = gr.State(None)
 
         with gr.Tab("Data Upload"):
             gr.Markdown("""
@@ -224,7 +225,8 @@ def create_dashboard():
                     
                     operation_type = gr.Radio(
                         label="Operation Type",
-                        choices=["Sort", "Filter (Range)", "Filter (Values)", "Rename Column", "Select Columns"],
+                        choices=["Sort", "Filter (Range)", "Filter (Values)", 
+                                 "Filter (Date)", "Rename Column", "Select Columns"],
                         value="Sort"
                     )
                     
@@ -269,7 +271,28 @@ def create_dashboard():
                             allow_custom_value=False,
                             interactive=True
                         )
-                    
+
+                    # Date filter inputs
+                    with gr.Group(visible=False) as date_group:
+                        date_column = gr.Dropdown(
+                            label="Date Column",
+                            choices=[],
+                            allow_custom_value=False,
+                            interactive=True
+                        )
+                        with gr.Row():
+                            start_date = gr.Textbox(
+                                label="Start Date",
+                                placeholder="YYYY-MM-DD",
+                                interactive=True
+                            )
+                            end_date = gr.Textbox(
+                                label="End Date",
+                                placeholder="YYYY-MM-DD",
+                                interactive=True
+                            )
+                        gr.Markdown("*Leave either blank for open-ended range*")
+
                     # Rename inputs
                     with gr.Group(visible=False) as rename_group:
                         rename_old = gr.Dropdown(
@@ -335,15 +358,14 @@ def create_dashboard():
                         )
         
         with gr.Tab("Visualizations"):
-            # Charts and graphs
             gr.Markdown("""
                 ## Create Visualizations
                 ### Select a dataset and configure your chart settings.
             """)
             
             with gr.Row():
+                # Left column - Configuration
                 with gr.Column(scale=1):
-                    # Dataset selection
                     viz_file_dropdown = gr.Dropdown(
                         label="Choose Dataset",
                         choices=[],
@@ -352,9 +374,8 @@ def create_dashboard():
                     )
                     
                     load_viz_columns_btn = gr.Button("Load Columns", variant="secondary")
-            
-            with gr.Row():
-                with gr.Column(scale=1):
+                    
+                    gr.Markdown("---")
                     gr.Markdown("### Chart Configuration")
                     
                     plot_type_dropdown = gr.Dropdown(
@@ -365,20 +386,19 @@ def create_dashboard():
                         interactive=True
                     )
                     
-                    with gr.Row():
-                        x_column_dropdown = gr.Dropdown(
-                            label="X-Axis Column",
-                            choices=[],
-                            allow_custom_value=False,
-                            interactive=True
-                        )
-                        
-                        y_column_dropdown = gr.Dropdown(
-                            label="Y-Axis Column (optional for some plots)",
-                            choices=[],
-                            allow_custom_value=False,
-                            interactive=True
-                        )
+                    x_column_dropdown = gr.Dropdown(
+                        label="X-Axis Column",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    y_column_dropdown = gr.Dropdown(
+                        label="Y-Axis Column (optional for some plots)",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
                     
                     aggregation_dropdown = gr.Dropdown(
                         label="Aggregation Method",
@@ -389,63 +409,230 @@ def create_dashboard():
                     )
                     
                     gr.Markdown("""
-                    **Aggregation Methods:**
-                    - **None**: Plot raw data points
-                    - **Sum**: Sum Y values for each unique X
-                    - **Mean**: Average Y values for each unique X
-                    - **Count**: Count occurrences for each unique X
-                    - **Median/Min/Max**: Respective aggregation per X
+                    **Aggregation:**
+                    - **None**: Raw data
+                    - **Sum/Mean/Median**: Aggregate Y per X
+                    - **Count**: Count occurrences per X
                     """)
-            
-            gr.Markdown("---")
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### Custom Labels (Optional)")
-                    gr.Markdown("*Leave blank to use column names as defaults*")
                     
-                    with gr.Row():
-                        custom_x_label = gr.Textbox(
-                            label="X-Axis Label",
-                            placeholder="Enter custom x-axis label...",
-                            interactive=True
-                        )
-                        
-                        custom_y_label = gr.Textbox(
-                            label="Y-Axis Label", 
-                            placeholder="Enter custom y-axis label...",
-                            interactive=True
-                        )
+                    gr.Markdown("---")
+                    gr.Markdown("### Custom Labels (Optional)")
+                    
+                    custom_x_label = gr.Textbox(
+                        label="X-Axis Label",
+                        placeholder="Default: column name",
+                        interactive=True
+                    )
+                    
+                    custom_y_label = gr.Textbox(
+                        label="Y-Axis Label", 
+                        placeholder="Default: column name",
+                        interactive=True
+                    )
                     
                     custom_title = gr.Textbox(
                         label="Chart Title",
-                        placeholder="Enter custom title (default: 'X vs Y: Plot Type')",
+                        placeholder="Default: 'X vs Y: Plot Type'",
                         interactive=True
+                    )
+                    
+                    generate_plot_btn = gr.Button(
+                        "Generate Plot",
+                        variant="primary",
+                        size="lg"
+                    )
+                
+                # Right column - Output
+                with gr.Column(scale=2):
+                    gr.Markdown("### Plot Output")
+                    
+                    plot_output = gr.Plot(label="Visualization")
+                    
+                    plot_status = gr.Textbox(
+                        label="Status",
+                        interactive=False,
+                        lines=2
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### Save Plot")
+                    
+                    with gr.Row():
+                        save_format_dropdown = gr.Dropdown(
+                            label="File Format",
+                            choices=["png", "jpg", "svg", "pdf", "html"],
+                            value="png",
+                            allow_custom_value=False,
+                            interactive=True
+                        )
+                        
+                        save_filename = gr.Textbox(
+                            label="Filename (without extension)",
+                            placeholder="my_chart",
+                            value="plot",
+                            interactive=True
+                        )
+                    
+                    save_plot_btn = gr.Button("Save Plot", variant="secondary")
+                    
+                    plot_download = gr.File(label="Download Plot", interactive=False)
+        
+        with gr.Tab("Insights"):
+            # Automated insights
+            gr.Markdown("""
+                ## Automated Insight Generation
+                ### Discover top/bottom performers, trends, and anomalies in your data.
+                Select a dataset and numeric column to analyze. Optionally specify a label column 
+                (for identifying rows) and a date column (for time-based trend analysis).
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    # Dataset selection
+                    insight_file_dropdown = gr.Dropdown(
+                        label="Choose Dataset",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    load_insight_cols_btn = gr.Button("Load Columns", variant="secondary")
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### Analysis Configuration")
+                    
+                    # Column selections
+                    insight_value_col = gr.Dropdown(
+                        label="Numeric Column to Analyze (required)",
+                        choices=[],
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    insight_label_col = gr.Dropdown(
+                        label="Label Column (optional - for identifying rows)",
+                        choices=["(None)"],
+                        value="(None)",
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                    
+                    insight_date_col = gr.Dropdown(
+                        label="Date Column (optional - for time-based trends)",
+                        choices=["(None)"],
+                        value="(None)",
+                        allow_custom_value=False,
+                        interactive=True
+                    )
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("### Parameters")
+                    
+                    n_performers_slider = gr.Slider(
+                        label="Number of Top/Bottom Performers",
+                        minimum=3,
+                        maximum=20,
+                        value=5,
+                        step=1
+                    )
+                    
+                    anomaly_threshold_slider = gr.Slider(
+                        label="Anomaly Threshold (σ)",
+                        minimum=1.5,
+                        maximum=4.0,
+                        value=2.5,
+                        step=0.1
+                    )
+                    
+                    gr.Markdown("""
+                    **Anomaly Threshold Guide:**
+                    - 2.0σ: More sensitive (catches ~5% of data)
+                    - 2.5σ: Balanced (catches ~1% of data)
+                    - 3.0σ: Conservative (catches ~0.3% of data)
+                    """)
+            
+            with gr.Row():
+                generate_insights_btn = gr.Button(
+                    "Generate Insights",
+                    variant="primary",
+                    size="lg"
+                )
+                
+                quick_insights_btn = gr.Button(
+                    "Quick Scan All Columns",
+                    variant="secondary",
+                    size="lg"
+                )
+            
+            gr.Markdown("---")
+            
+            # Results Section
+            with gr.Row():
+                with gr.Column(scale=2):
+                    gr.Markdown("### Summary")
+                    insight_summary = gr.Markdown(
+                        value="*Select a dataset and column, then click 'Generate Insights'*"
                     )
             
             gr.Markdown("---")
             
             with gr.Row():
-                generate_plot_btn = gr.Button(
-                    "Generate Plot",
-                    variant="primary",
-                    size="lg"
-                )
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🏆 Top Performers")
+                    top_performers_df = gr.DataFrame(
+                        label="Highest Values",
+                        interactive=False,
+                        wrap=True
+                    )
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📉 Bottom Performers")
+                    bottom_performers_df = gr.DataFrame(
+                        label="Lowest Values",
+                        interactive=False,
+                        wrap=True
+                    )
+            
+            gr.Markdown("---")
             
             with gr.Row():
-                plot_output = gr.Plot(
-                    label="Visualization"
-                )
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📈 Trend Analysis")
+                    trend_df = gr.DataFrame(
+                        label="Trend Metrics",
+                        interactive=False,
+                        wrap=True
+                    )
                 
-            plot_status = gr.Textbox(
-                label="Status",
+                with gr.Column(scale=1):
+                    gr.Markdown("### ⚠️ Anomalies Detected")
+                    anomalies_df = gr.DataFrame(
+                        label="Outlier Rows",
+                        interactive=False,
+                        wrap=True
+                    )
+            
+            gr.Markdown("---")
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📊 Distribution Statistics")
+                    distribution_df = gr.DataFrame(
+                        label="Statistical Summary",
+                        interactive=False,
+                        wrap=True
+                    )
+            
+            gr.Markdown("---")
+            gr.Markdown("### Quick Scan Results (All Numeric Columns)")
+            
+            quick_scan_summary = gr.Markdown(value="")
+            quick_scan_df = gr.DataFrame(
+                label="All Columns Overview",
                 interactive=False,
-                lines=2
+                wrap=True
             )
-        
-        with gr.Tab("Insights"):
-            # Automated insights
-            pass
             
         load_btn.click(
             fn=utils.data_upload_pipeline,
@@ -455,7 +642,8 @@ def create_dashboard():
                     preview_file_dropdown,
                     profile_file_dropdown,
                     filter_file_dropdown,
-                    viz_file_dropdown]
+                    viz_file_dropdown,
+                    insight_file_dropdown]
         )
 
         preview_btn.click(
@@ -546,6 +734,7 @@ def create_dashboard():
                 gr.Group(visible=(op_type == "Sort")),
                 gr.Group(visible=(op_type == "Filter (Range)")),
                 gr.Group(visible=(op_type == "Filter (Values)")),
+                gr.Group(visible=(op_type == "Filter (Date)")),
                 gr.Group(visible=(op_type == "Rename Column")),
                 gr.Group(visible=(op_type == "Select Columns"))
             )
@@ -553,7 +742,8 @@ def create_dashboard():
         operation_type.change(
             fn=toggle_operation_groups,
             inputs=[operation_type],
-            outputs=[sort_group, range_group, values_group, rename_group, select_group]
+            outputs=[sort_group, range_group, values_group,
+                     date_group, rename_group, select_group]
         )
         
         # Load columns when dataset is selected
@@ -561,7 +751,7 @@ def create_dashboard():
             fn=utils.load_filter_columns_and_preview,
             inputs=[loaded_data, filter_file_dropdown, pending_operations],
             outputs=[
-                sort_columns, range_column, values_column, rename_old, select_columns,
+                sort_columns, range_column, values_column, date_column, rename_old, select_columns,
                 operations_preview, preview_stats, pending_operations, operations_summary
             ]
         )
@@ -581,6 +771,7 @@ def create_dashboard():
                 sort_columns, sort_order,
                 range_column, range_min, range_max,
                 values_column, available_values,
+                date_column, start_date, end_date,
                 rename_old, rename_new,
                 select_columns,
                 loaded_data, filter_file_dropdown
@@ -628,7 +819,51 @@ def create_dashboard():
                     x_column_dropdown, y_column_dropdown,
                     custom_x_label, custom_y_label, custom_title,
                     aggregation_dropdown],
-            outputs=[plot_output, plot_status]
+            outputs=[plot_output, plot_status, current_figure]
+        )
+
+        save_plot_btn.click(
+            fn=utils.save_plot,
+            inputs=[current_figure, save_filename, save_format_dropdown],
+            outputs=[plot_download]
+        )
+
+        load_insight_cols_btn.click(
+            fn=utils.load_insight_columns,
+            inputs=[loaded_data, insight_file_dropdown],
+            outputs=[insight_value_col, insight_label_col, insight_date_col]
+        )
+
+        # ==========================================
+        # Insights Handlers
+        # ==========================================
+
+        generate_insights_btn.click(
+            fn=utils.generate_insights_wrapper,
+            inputs=[
+                loaded_data, 
+                insight_file_dropdown, 
+                insight_value_col, 
+                insight_label_col, 
+                insight_date_col,
+                n_performers_slider,
+                anomaly_threshold_slider
+            ],
+            outputs=[
+                insight_summary,
+                top_performers_df,
+                bottom_performers_df,
+                trend_df,
+                anomalies_df,
+                distribution_df
+            ]
+        )
+
+        # Quick scan all columns
+        quick_insights_btn.click(
+            fn=utils.quick_insights_all_columns,
+            inputs=[loaded_data, insight_file_dropdown],
+            outputs=[quick_scan_summary, quick_scan_df]
         )
 
     return demo

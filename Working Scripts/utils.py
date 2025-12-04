@@ -30,6 +30,7 @@ def data_upload_pipeline(uploaded_paths):
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
+                gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[])
             )
 
@@ -56,7 +57,8 @@ def data_upload_pipeline(uploaded_paths):
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=[])
+            gr.Dropdown(choices=loaded),
+            gr.Dropdown(choices=loaded)
             )
 
 def profile_file(loaded_data, selected_file):
@@ -475,7 +477,7 @@ def load_filter_columns_and_preview(loaded_data, selected_file, pending_operatio
         empty_dropdown = gr.Dropdown(choices=[])
         return (
             empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown,
-            None, "*Select a dataset to begin*", [], "No operations added yet"
+            empty_dropdown, empty_dropdown, "*Select a dataset to begin*", [], "No operations added yet"
         )
     
     columns, _ = get_column_info(loaded_data, selected_file)
@@ -486,7 +488,8 @@ def load_filter_columns_and_preview(loaded_data, selected_file, pending_operatio
     stats = f"**Original:** {len(df)} rows × {len(df.columns)} columns"
     
     return (
-        dropdown_update, dropdown_update, dropdown_update, dropdown_update, dropdown_update,
+        dropdown_update, dropdown_update, dropdown_update, 
+        dropdown_update, dropdown_update, dropdown_update,
         preview_df, stats, [], "No operations added yet"
     )
 
@@ -500,45 +503,67 @@ def apply_operations_to_df(df, operations):
     
     for op in operations:
         op_type = op['type']
+        columns = op.get('columns', [])
+        params = op.get('params', {})
         
         if op_type == 'sort':
-            result_df, log = insights.sort(
-                result_df, 
-                op['columns'], 
-                op['ascending']
-            )
+            ascending = params.get('ascending', True)
+            result_df, log = insights.sort(result_df, columns, ascending)
             logs.append(log)
         
         elif op_type == 'filter_range':
+            column = columns[0] if columns else op.get('column')
             result_df, log = insights.filter_range(
                 result_df,
-                op['column'],
-                op.get('min'),
-                op.get('max')
+                column,
+                params.get('min'),
+                params.get('max')
             )
             logs.append(log)
         
         elif op_type == 'filter_values':
+            column = columns[0] if columns else op.get('column')
             result_df, log = insights.filter_values(
                 result_df,
-                op['column'],
-                op['values']
+                column,
+                params.get('values', [])
             )
+            logs.append(log)
+
+        elif op_type == 'filter_date':
+            column = op.get('column')
+            start = op.get('start')
+            end = op.get('end')
+            # Check if filter_date_range exists, otherwise do manual filtering
+            if hasattr(insights, 'filter_date_range'):
+                result_df, log = insights.filter_date_range(result_df, column, start, end)
+            else:
+                # Manual date filtering
+                if start:
+                    result_df = result_df[result_df[column] >= start]
+                if end:
+                    result_df = result_df[result_df[column] <= end]
+                log = f"Filtered {column} from {start or '...'} to {end or '...'}"
             logs.append(log)
         
         elif op_type == 'rename':
-            result_df, log = insights.rename_columns(
-                result_df,
-                {op['old_name']: op['new_name']}
-            )
+            old_name = columns[0] if columns else op.get('old_name')
+            new_name = params.get('new_name', op.get('new_name'))
+            result_df, log = insights.rename_columns(result_df, {old_name: new_name})
+            logs.append(log)
+        
+        elif op_type == 'select':
+            # Handle 'select' type (from add_operation)
+            result_df, log = insights.select_columns(result_df, columns)
             logs.append(log)
         
         elif op_type == 'select_columns':
-            result_df, log = insights.select_columns(
-                result_df,
-                op['columns']
-            )
+            # Handle 'select_columns' type (legacy)
+            result_df, log = insights.select_columns(result_df, columns)
             logs.append(log)
+        
+        else:
+            logs.append(f"Unknown operation: {op_type}")
     
     return result_df, logs
 
@@ -581,91 +606,85 @@ def add_operation(pending_operations, operation_type,
                   sort_columns, sort_order,
                   range_column, range_min, range_max,
                   values_column, available_values,
+                  date_column, start_date, end_date,
                   rename_old, rename_new,
                   select_columns,
                   loaded_data, selected_file):
-    """
-    Add a new operation to the pending list and update the live preview.
-    """
-    if not loaded_data or selected_file not in loaded_data:
-        return pending_operations, "No dataset selected", None, "*Select a dataset*"
+    """Add an operation to the pending list and update preview."""
     
-    # Build the operation based on type
+    if not loaded_data or selected_file not in loaded_data:
+        return pending_operations, "No dataset selected", None, ""
+    
+    pending_operations = list(pending_operations)  # Copy
     new_op = None
     
-    if operation_type == "Sort":
-        if sort_columns:
-            new_op = {
-                'type': 'sort',
-                'columns': sort_columns,
-                'ascending': sort_order == "Ascending"
-            }
+    if operation_type == "Sort" and sort_columns:
+        new_op = {
+            'type': 'sort',
+            'columns': sort_columns,
+            'params': {'ascending': sort_order == "Ascending"},
+            'display': f"Sort by {sort_columns} ({'asc' if sort_order == 'Ascending' else 'desc'})"
+        }
     
-    elif operation_type == "Filter (Range)":
-        if range_column and (range_min is not None or range_max is not None):
+    elif operation_type == "Filter (Range)" and range_column:
+        if range_min is not None or range_max is not None:
             new_op = {
                 'type': 'filter_range',
-                'column': range_column,
-                'min': range_min,
-                'max': range_max
+                'columns': [range_column],
+                'params': {'min': range_min, 'max': range_max},
+                'display': f"Filter {range_column}: [{range_min or '...'} to {range_max or '...'}]"
             }
     
-    elif operation_type == "Filter (Values)":
-        if values_column and available_values:
-            # Convert string values back to original types
-            df = loaded_data[selected_file]
-            original_dtype = df[values_column].dtype
-            converted_values = available_values
-            
-            if pd.api.types.is_numeric_dtype(original_dtype):
-                try:
-                    converted_values = [
-                        float(v) if '.' in str(v) else int(v) 
-                        for v in available_values
-                    ]
-                except:
-                    pass
-            
+    elif operation_type == "Filter (Values)" and values_column and available_values:
+        new_op = {
+            'type': 'filter_values',
+            'columns': [values_column],
+            'params': {'values': available_values},
+            'display': f"Filter {values_column} to {len(available_values)} values"
+        }
+    
+    elif operation_type == "Filter (Date)" and date_column:
+        if start_date or end_date:
             new_op = {
-                'type': 'filter_values',
-                'column': values_column,
-                'values': converted_values
+                'type': 'filter_date',
+                'column': date_column,
+                'start': start_date if start_date else None,
+                'end': end_date if end_date else None,
+                'display': f"Filter {date_column}: [{start_date or '...'} to {end_date or '...'}]"
             }
     
-    elif operation_type == "Rename Column":
-        if rename_old and rename_new:
-            new_op = {
-                'type': 'rename',
-                'old_name': rename_old,
-                'new_name': rename_new
-            }
+    elif operation_type == "Rename Column" and rename_old and rename_new:
+        new_op = {
+            'type': 'rename',
+            'columns': [rename_old],
+            'params': {'new_name': rename_new},
+            'display': f"Rename '{rename_old}' → '{rename_new}'"
+        }
     
-    elif operation_type == "Select Columns":
-        if select_columns:
-            new_op = {
-                'type': 'select_columns',
-                'columns': select_columns
-            }
+    elif operation_type == "Select Columns" and select_columns:
+        new_op = {
+            'type': 'select',
+            'columns': select_columns,
+            'params': {},
+            'display': f"Keep {len(select_columns)} columns"
+        }
     
-    if new_op is None:
-        # No valid operation configured
-        summary = format_operations_summary(pending_operations)
-        df = loaded_data[selected_file]
-        transformed_df, _ = apply_operations_to_df(df, pending_operations)
-        stats = f"**Original:** {len(df)} rows × {len(df.columns)} cols → **Preview:** {len(transformed_df)} rows × {len(transformed_df.columns)} cols"
-        return pending_operations, summary, transformed_df.head(20), stats
+    if new_op:
+        pending_operations.append(new_op)
     
-    # Add the new operation
-    updated_operations = pending_operations + [new_op]
+    # Apply operations to get preview
+    df = loaded_data[selected_file].copy()
+    df, _ = apply_operations_to_df(df, pending_operations)
     
-    # Apply all operations and get preview
-    df = loaded_data[selected_file]
-    transformed_df, logs = apply_operations_to_df(df, updated_operations)
+    # Build summary
+    if pending_operations:
+        summary = "\n".join([f"{i+1}. {op['display']}" for i, op in enumerate(pending_operations)])
+    else:
+        summary = "No operations added yet"
     
-    summary = format_operations_summary(updated_operations)
-    stats = f"**Original:** {len(df)} rows × {len(df.columns)} cols → **Preview:** {len(transformed_df)} rows × {len(transformed_df.columns)} cols"
+    preview_stats = f"**Preview**: {len(df):,} rows × {len(df.columns)} columns"
     
-    return updated_operations, summary, transformed_df.head(20), stats
+    return pending_operations, summary, df.head(20), preview_stats
 
 def clear_operations(loaded_data, selected_file):
     """Clear all pending operations and reset preview."""
@@ -765,19 +784,18 @@ def generate_plot_wrapper(loaded_data, selected_file, plot_type,
                           aggregation):
     """Wrapper to generate plot from Gradio inputs."""
     if not loaded_data or selected_file not in loaded_data:
-        return None, "No dataset selected."
+        return None, "No dataset selected.", None
     
     if not x_col:
-        return None, "Please select an X-axis column."
+        return None, "Please select an X-axis column.", None
     
     df = loaded_data[selected_file]
     
-    # Validate columns exist
     if x_col not in df.columns:
-        return None, f"Column '{x_col}' not found in dataset."
+        return None, f"Column '{x_col}' not found in dataset.", None
     
     if y_col and y_col not in df.columns:
-        return None, f"Column '{y_col}' not found in dataset."
+        return None, f"Column '{y_col}' not found in dataset.", None
     
     try:
         fig = viz.generate_plot(
@@ -792,13 +810,249 @@ def generate_plot_wrapper(loaded_data, selected_file, plot_type,
         )
         
         if fig is None:
-            return None, f"Could not generate {plot_type} plot. Check that you've selected appropriate columns."
+            return None, f"Could not generate {plot_type} plot. Check column selection.", None
         
         status = f"Generated {plot_type} plot"
         if aggregation != "None":
             status += f" with {aggregation} aggregation"
         
-        return fig, status
+        # Return fig twice: once for display, once for state storage
+        return fig, status, fig
         
     except Exception as e:
-        return None, f"Error generating plot: {str(e)}"
+        return None, f"Error generating plot: {str(e)}", None
+    
+def save_plot(fig, filename, file_format):
+    """Save the plot to a file for download."""
+    if fig is None:
+        return None
+    
+    if not filename or not filename.strip():
+        filename = "plot"
+    
+    filename = filename.strip()
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, f"{filename}.{file_format}")
+    
+    try:
+        if file_format == "html":
+            fig.write_html(output_path)
+        else:
+            fig.write_image(output_path, format=file_format)
+        
+        return output_path
+    except Exception as e:
+        print(f"Error saving plot: {e}")
+        return None
+    
+#=========================================================================================
+# Insights Tab Utilities
+#=========================================================================================
+
+def load_insight_columns(loaded_data, selected_file):
+    """
+    Load column options for the insights tab dropdowns.
+    Returns updates for value_col, label_col, and date_col dropdowns.
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        empty = gr.Dropdown(choices=[])
+        return empty, empty, empty
+    
+    df = loaded_data[selected_file]
+    
+    numeric_cols = insights.get_numeric_columns(df)
+    categorical_cols = insights.get_categorical_columns(df)
+    date_cols = insights.get_date_columns(df)
+    
+    # Add "None" option for optional fields
+    categorical_with_none = ["(None)"] + categorical_cols
+    date_with_none = ["(None)"] + date_cols
+    
+    return (
+        gr.Dropdown(choices=numeric_cols, value=numeric_cols[0] if numeric_cols else None),
+        gr.Dropdown(choices=categorical_with_none, value="(None)"),
+        gr.Dropdown(choices=date_with_none, value="(None)")
+    )
+
+
+def generate_insights_wrapper(loaded_data, selected_file, value_col, label_col, date_col, n_performers, anomaly_threshold):
+    """
+    Generate all insights and format for Gradio display.
+    Returns: summary_text, top_performers_df, bottom_performers_df, trend_df, anomalies_df, distribution_df
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return "No dataset selected.", None, None, None, None, None
+    
+    if not value_col:
+        return "Please select a numeric column to analyze.", None, None, None, None, None
+    
+    df = loaded_data[selected_file]
+    
+    # Handle "None" selections
+    label = None if label_col == "(None)" else label_col
+    date = None if date_col == "(None)" else date_col
+    
+    # Generate insights
+    results = insights.generate_all_insights(
+        df, 
+        value_col, 
+        label_col=label, 
+        date_col=date, 
+        n_performers=int(n_performers),
+        anomaly_threshold=float(anomaly_threshold)
+    )
+    
+    # Build summary text
+    summary_parts = [f"## Insights for: `{value_col}`\n"]
+    
+    # Distribution summary
+    dist = results["distribution"]
+    if dist:
+        summary_parts.append(f"**Distribution Overview**")
+        summary_parts.append(f"- Count: {dist['count']:,} values")
+        summary_parts.append(f"- Range: {dist['min']} to {dist['max']}")
+        summary_parts.append(f"- Mean: {dist['mean']} | Median: {dist['median']}")
+        summary_parts.append(f"- Std Dev: {dist['std']} | IQR: {dist['iqr']}")
+        
+        # Interpret skew
+        skew = dist['skew']
+        if skew > 1:
+            skew_desc = "strongly right-skewed (long tail of high values)"
+        elif skew > 0.5:
+            skew_desc = "moderately right-skewed"
+        elif skew < -1:
+            skew_desc = "strongly left-skewed (long tail of low values)"
+        elif skew < -0.5:
+            skew_desc = "moderately left-skewed"
+        else:
+            skew_desc = "approximately symmetric"
+        summary_parts.append(f"- Skewness: {skew} ({skew_desc})\n")
+    
+    # Trend summary
+    trend = results["trend"]
+    if trend and trend.get("trend") != "insufficient data":
+        trend_emoji = {"increasing": "📈", "decreasing": "📉", "stable": "➡️"}.get(trend["trend"], "")
+        summary_parts.append(f"**Trend Analysis** {trend_emoji}")
+        summary_parts.append(f"- Direction: **{trend['trend'].upper()}**")
+        summary_parts.append(f"- Change: {trend['change_pct']}% (first half avg → second half avg)")
+        summary_parts.append(f"- First half avg: {trend['start_avg']} | Second half avg: {trend['end_avg']}\n")
+    
+    # Anomalies summary
+    anomalies = results["anomalies"]
+    if anomalies:
+        if anomalies["count"] > 0:
+            summary_parts.append(f"**Anomalies Detected** ⚠️")
+            summary_parts.append(f"- Found {anomalies['count']} outlier(s) beyond {anomalies['threshold']}σ")
+            summary_parts.append(f"- High outliers: {len(anomalies['high'])}")
+            summary_parts.append(f"- Low outliers: {len(anomalies['low'])}")
+        else:
+            summary_parts.append(f"**Anomalies** ✓")
+            summary_parts.append(f"- No outliers detected beyond {anomalies['threshold']}σ threshold")
+    
+    summary_text = "\n".join(summary_parts)
+    
+    # Prepare DataFrames for display
+    top_df = results["performers"]["top"] if results["performers"] else None
+    bottom_df = results["performers"]["bottom"] if results["performers"] else None
+    
+    # Trend DataFrame
+    if trend and trend.get("trend") != "insufficient data":
+        trend_df = pd.DataFrame([{
+            "Metric": "Trend Direction",
+            "Value": trend["trend"].upper()
+        }, {
+            "Metric": "Slope (per row)",
+            "Value": trend["slope"]
+        }, {
+            "Metric": "Normalized Slope (%)",
+            "Value": f"{trend['normalized_slope_pct']}%"
+        }, {
+            "Metric": "First Half Average",
+            "Value": trend["start_avg"]
+        }, {
+            "Metric": "Second Half Average",
+            "Value": trend["end_avg"]
+        }, {
+            "Metric": "Overall Change",
+            "Value": f"{trend['change_pct']}%"
+        }])
+    else:
+        trend_df = pd.DataFrame([{"Metric": "Status", "Value": "Insufficient data for trend analysis"}])
+    
+    # Anomalies DataFrame
+    if anomalies and anomalies["count"] > 0:
+        anomalies_df = pd.concat([anomalies["high"], anomalies["low"]], ignore_index=True)
+        # Limit to first 20 for display
+        if len(anomalies_df) > 20:
+            anomalies_df = anomalies_df.head(20)
+    else:
+        anomalies_df = pd.DataFrame([{"Status": "No anomalies detected"}])
+    
+    # Distribution DataFrame
+    if dist:
+        dist_df = pd.DataFrame([{
+            "Statistic": k.replace("_", " ").title(),
+            "Value": v
+        } for k, v in dist.items()])
+    else:
+        dist_df = None
+    
+    return summary_text, top_df, bottom_df, trend_df, anomalies_df, dist_df
+
+
+def quick_insights_all_columns(loaded_data, selected_file):
+    """
+    Generate a quick summary of insights for ALL numeric columns.
+    Returns a summary DataFrame and detailed text.
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return "No dataset selected.", None
+    
+    df = loaded_data[selected_file]
+    numeric_cols = insights.get_numeric_columns(df)
+    
+    if not numeric_cols:
+        return "No numeric columns found in dataset.", None
+    
+    summary_rows = []
+    
+    for col in numeric_cols:
+        dist = insights.get_distribution_stats(df, col)
+        trend = insights.detect_trend(df, col)
+        anomalies = insights.find_anomalies(df, col)
+        
+        trend_indicator = ""
+        if trend and trend.get("trend") != "insufficient data":
+            trend_indicator = {"increasing": "↑", "decreasing": "↓", "stable": "→"}.get(trend["trend"], "")
+        
+        summary_rows.append({
+            "Column": col,
+            "Mean": dist["mean"] if dist else "-",
+            "Median": dist["median"] if dist else "-",
+            "Std Dev": dist["std"] if dist else "-",
+            "Min": dist["min"] if dist else "-",
+            "Max": dist["max"] if dist else "-",
+            "Trend": f"{trend_indicator} {trend['change_pct']}%" if trend and trend.get("change_pct") else "-",
+            "Anomalies": anomalies["count"] if anomalies else 0
+        })
+    
+    summary_df = pd.DataFrame(summary_rows)
+    
+    # Build text summary
+    text_parts = [f"## Quick Insights Summary\n"]
+    text_parts.append(f"Analyzed **{len(numeric_cols)}** numeric columns in `{selected_file}`\n")
+    
+    # Highlight notable findings
+    anomaly_cols = [r["Column"] for r in summary_rows if r["Anomalies"] > 0]
+    if anomaly_cols:
+        text_parts.append(f"⚠️ **Columns with anomalies:** {', '.join(anomaly_cols)}")
+    
+    increasing = [r["Column"] for r in summary_rows if "↑" in str(r["Trend"])]
+    decreasing = [r["Column"] for r in summary_rows if "↓" in str(r["Trend"])]
+    
+    if increasing:
+        text_parts.append(f"📈 **Increasing trends:** {', '.join(increasing)}")
+    if decreasing:
+        text_parts.append(f"📉 **Decreasing trends:** {', '.join(decreasing)}")
+    
+    return "\n".join(text_parts), summary_df
