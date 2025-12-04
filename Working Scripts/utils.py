@@ -208,7 +208,7 @@ def fill_nulls_wrapper(loaded_data, selected_file, columns, method):
         return message, loaded_data
     
     except Exception as e:
-        return f"Error filling nulls: {str(e)}", None, None, loaded_data
+        return f"Error filling nulls: {str(e)}", loaded_data
 
 
 def get_columns_with_nulls(loaded_data, selected_file):
@@ -312,7 +312,7 @@ def operations(loaded_data, selected_file, operations, save_name=None, preview_o
                 operation_log.append(log)
             
             elif op_type == 'sum':
-                df, log = sum(df, columns)
+                df, log = insights.sum(df, columns)
                 operation_log.append(log)
             
             elif op_type == 'select_columns':

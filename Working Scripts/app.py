@@ -547,7 +547,7 @@ def create_dashboard():
         fill_nulls_btn.click(
             fn=utils.fill_nulls_wrapper,
             inputs=[loaded_data, null_file_dropdown, null_columns_dropdown, fill_method_dropdown],
-            outputs=[null_status, cleaned_summary, cleaned_col_stats, loaded_data]  # Fixed outputs
+            outputs=[null_status, loaded_data] 
         )
 
         drop_dupes_btn.click(
