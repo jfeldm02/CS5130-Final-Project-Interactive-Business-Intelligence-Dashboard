@@ -317,17 +317,18 @@ def create_dashboard():
                     )
             
         with gr.Tab("Filter & Explore"):
-            # Interactive filtering
-            # Update the Filter & Transform tab
             gr.Markdown("""
                 ## Filter and Transform Your Data
-                ### Apply multiple operations: sort, filter by range, filter by values, rename columns, and select columns.
-                **All operations create a new dataset, preserving the original.**
+                Build transformations interactively. Changes preview live as you configure them.
+                **Disclaimer:** Perform the change name operation last if desired! The other tabs cannot track the new name column.
             """)
             
+            # State for tracking operations
+            pending_operations = gr.State([])
+            
             with gr.Row():
+                # Left panel: Controls
                 with gr.Column(scale=1):
-                    # Dataset selection
                     filter_file_dropdown = gr.Dropdown(
                         label="Choose Dataset",
                         choices=[],
@@ -335,163 +336,120 @@ def create_dashboard():
                         interactive=True
                     )
                     
-                    load_columns_btn = gr.Button("Load Columns", variant="secondary")
-            
-            # Sort Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 1. Sort Data")
+                    gr.Markdown("---")
+                    gr.Markdown("### Add Operation")
                     
-                    sort_columns = gr.Dropdown(
-                        label="Sort by Column(s)",
-                        choices=[],
-                        multiselect=True,
-                        allow_custom_value=False,
-                        interactive=True
+                    operation_type = gr.Radio(
+                        label="Operation Type",
+                        choices=["Sort", "Filter (Range)", "Filter (Values)", "Rename Column", "Select Columns"],
+                        value="Sort"
                     )
                     
-                    sort_order = gr.Radio(
-                        label="Sort Order",
-                        choices=["Ascending", "Descending"],
-                        value="Ascending"
-                    )
-            
-            # Filter by Range Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 2. Filter by Numeric Range")
-                    
-                    range_column = gr.Dropdown(
-                        label="Column to Filter",
-                        choices=[],
-                        allow_custom_value=False,
-                        interactive=True
-                    )
-                    
-                    with gr.Row():
-                        range_min = gr.Number(
-                            label="Minimum Value (leave empty for no minimum)",
-                            value=None
+                    # Sort inputs
+                    with gr.Group() as sort_group:
+                        sort_columns = gr.Dropdown(
+                            label="Sort by Column(s)",
+                            choices=[],
+                            multiselect=True,
+                            allow_custom_value=False,
+                            interactive=True
                         )
-                        range_max = gr.Number(
-                            label="Maximum Value (leave empty for no maximum)",
-                            value=None
+                        sort_order = gr.Radio(
+                            label="Order",
+                            choices=["Ascending", "Descending"],
+                            value="Ascending"
                         )
-            
-            # Filter by Values Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 3. Filter by Specific Values")
                     
-                    values_column = gr.Dropdown(
-                        label="Column to Filter",
-                        choices=[],
-                        allow_custom_value=False,
-                        interactive=True
-                    )
+                    # Range filter inputs
+                    with gr.Group(visible=False) as range_group:
+                        range_column = gr.Dropdown(
+                            label="Column",
+                            choices=[],
+                            allow_custom_value=False,
+                            interactive=True
+                        )
+                        range_min = gr.Number(label="Min", value=None)
+                        range_max = gr.Number(label="Max", value=None)
                     
-                    available_values = gr.Dropdown(
-                        label="Select Values to Keep",
-                        choices=[],
-                        multiselect=True,
-                        allow_custom_value=False,
-                        interactive=True
-                    )
+                    # Value filter inputs
+                    with gr.Group(visible=False) as values_group:
+                        values_column = gr.Dropdown(
+                            label="Column",
+                            choices=[],
+                            allow_custom_value=False,
+                            interactive=True
+                        )
+                        available_values = gr.Dropdown(
+                            label="Keep Values",
+                            choices=[],
+                            multiselect=True,
+                            allow_custom_value=False,
+                            interactive=True
+                        )
                     
-                    load_values_btn = gr.Button("Load Available Values", size="sm")
-            
-            # Rename Columns Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 4. Rename Columns")
-                    gr.Markdown("*Add multiple renames by filling fields and clicking 'Add Rename'. View all queued renames below.*")
-                    
-                    with gr.Row():
+                    # Rename inputs
+                    with gr.Group(visible=False) as rename_group:
                         rename_old = gr.Dropdown(
                             label="Column to Rename",
                             choices=[],
                             allow_custom_value=False,
                             interactive=True
                         )
-                        
                         rename_new = gr.Textbox(
                             label="New Name",
-                            placeholder="Enter new column name..."
+                            placeholder="Enter new name..."
                         )
                     
-                    add_rename_btn = gr.Button("Add Rename to Queue", size="sm", variant="secondary")
+                    # Select columns inputs
+                    with gr.Group(visible=False) as select_group:
+                        select_columns = gr.Dropdown(
+                            label="Columns to Keep",
+                            choices=[],
+                            multiselect=True,
+                            allow_custom_value=False,
+                            interactive=True
+                        )
                     
-                    rename_queue = gr.State({})  # Store rename mappings
+                    add_operation_btn = gr.Button("+ Add Operation", variant="secondary")
                     
-                    rename_queue_display = gr.Textbox(
-                        label="Queued Column Renames",
-                        value="No renames queued",
+                    gr.Markdown("---")
+                    
+                    operations_summary = gr.Textbox(
+                        label="Pending Operations",
+                        value="No operations added yet",
                         interactive=False,
-                        lines=4
+                        lines=8
                     )
                     
-                    clear_renames_btn = gr.Button("Clear Rename Queue", size="sm")
-            
-            # Select Columns Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("### 5. Select Columns to Keep")
+                    with gr.Row():
+                        clear_operations_btn = gr.Button("Clear All", size="sm")
+                        undo_operation_btn = gr.Button("Undo Last", size="sm")
+                
+                # Right panel: Live preview
+                with gr.Column(scale=2):
+                    gr.Markdown("### Live Preview")
                     
-                    select_columns = gr.Dropdown(
-                        label="Columns to Keep (leave empty to keep all)",
-                        choices=[],
-                        multiselect=True,
-                        allow_custom_value=False,
-                        interactive=True
-                    )
-            
-            gr.Markdown("---")
-            gr.Markdown("---")
-            # Preview Results and Save
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("## Result Preview (first 20 rows)")
+                    preview_stats = gr.Markdown("*Select a dataset to begin*")
                     
-                    preview_operations_btn = gr.Button(
-                        "Preview Transformation",
-                        variant="secondary",
-                        size="lg"
-                    )
-
                     operations_preview = gr.DataFrame(
-                        label="Transformed Data Preview",
+                        label="Data Preview (first 20 rows)",
                         interactive=False,
                         wrap=True
                     )
-
-                    operations_status = gr.Textbox(
-                        label="Operations Status",
-                        interactive=False,
-                        lines=10
-                    )
-
-            # Save Configuration Section
-            gr.Markdown("---")
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown("""
-                        ### 6. Name Your Transformed Dataset (Optional)
-                        **Leave empty** to auto-generate a name like `dataset_transformed`, or 
-                        **provide a custom name** to easily reference this configuration later.
-                    """)
                     
-                    save_config_name = gr.Textbox(
-                        label="Custom Dataset Name (optional)",
-                        placeholder="e.g., sales_q4_cleaned, high_value_customers, etc.",
-                        interactive=True
-                    )
-            
-                    apply_operations_btn = gr.Button(
-                        "Apply Operations & Save",
-                        variant="primary",
-                        size="lg"
-                    )
+                    gr.Markdown("---")
+                    
+                    with gr.Row():
+                        save_config_name = gr.Textbox(
+                            label="Save As (optional)",
+                            placeholder="e.g., sales_filtered",
+                            scale=2
+                        )
+                        apply_operations_btn = gr.Button(
+                            "Save Transformed Dataset",
+                            variant="primary",
+                            scale=1
+                        )
         
         with gr.Tab("Visualizations"):
             # Charts and graphs
@@ -564,45 +522,80 @@ def create_dashboard():
             outputs=[download_output]
         )
         
+        # ==========================================
         # Filter & Explore handlers
-        load_columns_btn.click(
-            fn=utils.update_filter_columns,
-            inputs=[loaded_data, filter_file_dropdown],
-            outputs=[sort_columns, range_column, values_column, select_columns, rename_old]
+        # ==========================================
+        
+        # Toggle visibility of operation input groups based on selected operation type
+        def toggle_operation_groups(op_type):
+            return (
+                gr.Group(visible=(op_type == "Sort")),
+                gr.Group(visible=(op_type == "Filter (Range)")),
+                gr.Group(visible=(op_type == "Filter (Values)")),
+                gr.Group(visible=(op_type == "Rename Column")),
+                gr.Group(visible=(op_type == "Select Columns"))
+            )
+        
+        operation_type.change(
+            fn=toggle_operation_groups,
+            inputs=[operation_type],
+            outputs=[sort_group, range_group, values_group, rename_group, select_group]
         )
-
-        load_values_btn.click(
+        
+        # Load columns when dataset is selected
+        filter_file_dropdown.change(
+            fn=utils.load_filter_columns_and_preview,
+            inputs=[loaded_data, filter_file_dropdown, pending_operations],
+            outputs=[
+                sort_columns, range_column, values_column, rename_old, select_columns,
+                operations_preview, preview_stats, pending_operations, operations_summary
+            ]
+        )
+        
+        # Load unique values when values_column changes
+        values_column.change(
             fn=utils.load_unique_values,
             inputs=[loaded_data, filter_file_dropdown, values_column],
             outputs=[available_values]
         )
-
-        add_rename_btn.click(
-            fn=utils.add_to_rename_queue,
-            inputs=[rename_queue, rename_old, rename_new],
-            outputs=[rename_queue, rename_queue_display]
+        
+        # Add operation to pending list
+        add_operation_btn.click(
+            fn=utils.add_operation,
+            inputs=[
+                pending_operations, operation_type,
+                sort_columns, sort_order,
+                range_column, range_min, range_max,
+                values_column, available_values,
+                rename_old, rename_new,
+                select_columns,
+                loaded_data, filter_file_dropdown
+            ],
+            outputs=[pending_operations, operations_summary, operations_preview, preview_stats]
         )
-
-        clear_renames_btn.click(
-            fn=utils.clear_rename_queue,
-            inputs=[],
-            outputs=[rename_queue, rename_queue_display]
+        
+        # Clear all operations
+        clear_operations_btn.click(
+            fn=utils.clear_operations,
+            inputs=[loaded_data, filter_file_dropdown],
+            outputs=[pending_operations, operations_summary, operations_preview, preview_stats]
         )
-
-        preview_operations_btn.click(
-            fn=utils.preview_operations,
-            inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
-                    range_column, range_min, range_max, values_column, available_values,
-                    rename_queue, select_columns, save_config_name],
-            outputs=[operations_status, operations_preview, loaded_data]
+        
+        # Undo last operation
+        undo_operation_btn.click(
+            fn=utils.undo_operation,
+            inputs=[pending_operations, loaded_data, filter_file_dropdown],
+            outputs=[pending_operations, operations_summary, operations_preview, preview_stats]
         )
-
-
+        
+        # Apply and save operations
         apply_operations_btn.click(
-            fn=utils.apply_all_operations,
-            inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
-                    range_column, range_min, range_max, values_column, available_values,
-                    rename_queue, select_columns, save_config_name],
+            fn=utils.save_transformed_dataset,
+            inputs=[loaded_data, filter_file_dropdown, pending_operations, save_config_name],
+            outputs=[
+                loaded_data, pending_operations, operations_summary, 
+                operations_preview, preview_stats, filter_file_dropdown
+            ]
         )
 
     return demo

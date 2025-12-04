@@ -267,97 +267,6 @@ def prepare_download(loaded_data, selected_file):
 # Filter and Explore Tab
 #=========================================================================================
 
-def operations(loaded_data, selected_file, operations, save_name=None, preview_only=False):
-    """
-    Apply multiple operations to a dataset.
-    
-    operations is a list of dicts with structure:
-    {
-        'type': 'sort' | 'filter_range' | 'filter_values' | 'sum' | 'select_columns' | 'rename_columns',
-        'columns': [list of column names],
-        'params': {additional parameters based on operation type}
-    }
-    """
-    if not loaded_data or selected_file not in loaded_data:
-        return "No dataset selected.", None, loaded_data
-    
-    try:
-        df = loaded_data[selected_file].copy()
-        operation_log = []
-        
-        for op in operations:
-            op_type = op['type']
-            columns = op.get('columns', [])
-            params = op.get('params', {})
-            
-            if op_type == 'sort':
-                df, log = insights.sort(df, columns, params.get('ascending', True))
-                operation_log.append(log)
-            
-            elif op_type == 'filter_range':
-                df, log = insights.filter_range(
-                    df, 
-                    columns[0], 
-                    params.get('min'), 
-                    params.get('max')
-                )
-                operation_log.append(log)
-            
-            elif op_type == 'filter_values':
-                df, log = insights.filter_values(
-                    df, 
-                    columns[0], 
-                    params.get('values', [])
-                )
-                operation_log.append(log)
-            
-            elif op_type == 'sum':
-                df, log = insights.sum(df, columns)
-                operation_log.append(log)
-            
-            elif op_type == 'select_columns':
-                df, log = insights.select_columns(df, columns)
-                operation_log.append(log)
-            
-            elif op_type == 'rename_columns':
-                df, log = insights.rename_columns(df, params.get('rename_map', {}))
-                operation_log.append(log)
-            
-            else:
-                operation_log.append(f"Unknown operation: {op_type}")
-        
-        if preview_only:
-            message = f"Preview: {len(df)} rows and {len(df.columns)} columns\n\n"
-            message += "Operations that will be applied:\n" + "\n".join(f"  - {log}" for log in operation_log)
-            message += "\n\n⚠️ This is a preview only. Click 'Apply Operations & Save' to save these changes."
-            return message, df.head(20), loaded_data
-
-        if save_name and save_name.strip():
-            # User provided a custom name
-            new_name = save_name.strip()
-            
-            # Check if name already exists
-            if new_name in loaded_data:
-                return f"Error: A dataset named '{new_name}' already exists. Choose a different name.", None, loaded_data
-        else:
-            # Use default naming with _transformed suffix
-            new_name = f"{selected_file}_transformed"
-            counter = 1
-            while new_name in loaded_data:
-                new_name = f"{selected_file}_transformed_{counter}"
-                counter += 1
-        
-        # Save the transformed dataset
-        loaded_data[new_name] = df
-        
-        message = f"Created '{new_name}' with {len(df)} rows and {len(df.columns)} columns\n\n"
-        message += "Operations applied:\n" + "\n".join(f"  - {log}" for log in operation_log)
-        
-        return message, df.head(20), loaded_data
-    
-    except Exception as e:
-        return f"Error applying operations: {str(e)}", None, loaded_data
-
 def get_column_info(loaded_data, selected_file):
     """Get column names and types for building filters."""
     if not loaded_data or selected_file not in loaded_data:
@@ -377,15 +286,9 @@ def get_column_info(loaded_data, selected_file):
         }
     
     return columns, column_info
- 
-    # Load columns when dataset is selected
-def update_filter_columns(loaded_data, selected_file):
-    columns, _ = get_column_info(loaded_data, selected_file)
-    dropdown_update = gr.Dropdown(choices=columns)
-    return [dropdown_update] * 5  # Update all 5 dropdowns
 
-# Load available values for selected column
 def load_unique_values(loaded_data, selected_file, column):
+    """Load unique values for a given column."""
     if not loaded_data or selected_file not in loaded_data or not column:
         return gr.Dropdown(choices=[])
     
@@ -396,86 +299,281 @@ def load_unique_values(loaded_data, selected_file, column):
     
     return gr.Dropdown(choices=[str(v) for v in unique_vals])
 
-# Add rename to queue
-def add_to_rename_queue(rename_map, old_name, new_name):
-    if not old_name or not new_name:
-        return rename_map, "No renames queued" if not rename_map else "\n".join([f"{k} → {v}" for k, v in rename_map.items()])
-    
-    rename_map = rename_map.copy()
-    rename_map[old_name] = new_name
-    
-    display = "\n".join([f"{k} → {v}" for k, v in rename_map.items()])
-    return rename_map, display
-
-# Clear rename queue
-def clear_rename_queue():
-    return {}, "No renames queued"
-
-def apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord, 
-                        range_col, r_min, r_max, val_col, val_list, 
-                        rename_map, sel_cols, custom_name, preview_only=False):
+def load_filter_columns_and_preview(loaded_data, selected_file, pending_operations):
     """
-    Wrapper function that builds operations list from Gradio inputs
-    and calls the operations function.
+    When dataset is selected, load columns into all dropdowns,
+    show initial preview, and reset pending operations.
     """
-    operations_list = []
+    if not loaded_data or selected_file not in loaded_data:
+        empty_dropdown = gr.Dropdown(choices=[])
+        return (
+            empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown, empty_dropdown,
+            None, "*Select a dataset to begin*", [], "No operations added yet"
+        )
     
-    # Build operations list
-    if sort_cols:
-        operations_list.append({
-            'type': 'sort',
-            'columns': sort_cols,
-            'params': {'ascending': sort_ord == "Ascending"}
-        })
+    columns, _ = get_column_info(loaded_data, selected_file)
+    df = loaded_data[selected_file]
     
-    if range_col and (r_min is not None or r_max is not None):
-        operations_list.append({
-            'type': 'filter_range',
-            'columns': [range_col],
-            'params': {'min': r_min, 'max': r_max}
-        })
+    dropdown_update = gr.Dropdown(choices=columns)
+    preview_df = df.head(20)
+    stats = f"**Original:** {len(df)} rows × {len(df.columns)} columns"
     
-    if val_col and val_list:
-        # Convert string values back to original types if needed
+    return (
+        dropdown_update, dropdown_update, dropdown_update, dropdown_update, dropdown_update,
+        preview_df, stats, [], "No operations added yet"
+    )
+
+def apply_operations_to_df(df, operations):
+    """
+    Apply a list of operations to a DataFrame and return the result.
+    Returns (transformed_df, operation_logs)
+    """
+    result_df = df.copy()
+    logs = []
+    
+    for op in operations:
+        op_type = op['type']
+        
+        if op_type == 'sort':
+            result_df, log = insights.sort(
+                result_df, 
+                op['columns'], 
+                op['ascending']
+            )
+            logs.append(log)
+        
+        elif op_type == 'filter_range':
+            result_df, log = insights.filter_range(
+                result_df,
+                op['column'],
+                op.get('min'),
+                op.get('max')
+            )
+            logs.append(log)
+        
+        elif op_type == 'filter_values':
+            result_df, log = insights.filter_values(
+                result_df,
+                op['column'],
+                op['values']
+            )
+            logs.append(log)
+        
+        elif op_type == 'rename':
+            result_df, log = insights.rename_columns(
+                result_df,
+                {op['old_name']: op['new_name']}
+            )
+            logs.append(log)
+        
+        elif op_type == 'select_columns':
+            result_df, log = insights.select_columns(
+                result_df,
+                op['columns']
+            )
+            logs.append(log)
+    
+    return result_df, logs
+
+def format_operations_summary(operations):
+    """Format the list of operations into a readable summary."""
+    if not operations:
+        return "No operations added yet"
+    
+    lines = []
+    for i, op in enumerate(operations, 1):
+        op_type = op['type']
+        
+        if op_type == 'sort':
+            order = "↑" if op['ascending'] else "↓"
+            lines.append(f"{i}. Sort by {', '.join(op['columns'])} {order}")
+        
+        elif op_type == 'filter_range':
+            min_val = op.get('min', '—')
+            max_val = op.get('max', '—')
+            lines.append(f"{i}. Filter {op['column']}: [{min_val} to {max_val}]")
+        
+        elif op_type == 'filter_values':
+            vals = ', '.join(str(v) for v in op['values'][:3])
+            if len(op['values']) > 3:
+                vals += f" (+{len(op['values']) - 3} more)"
+            lines.append(f"{i}. Keep {op['column']} in [{vals}]")
+        
+        elif op_type == 'rename':
+            lines.append(f"{i}. Rename: {op['old_name']} → {op['new_name']}")
+        
+        elif op_type == 'select_columns':
+            cols = ', '.join(op['columns'][:3])
+            if len(op['columns']) > 3:
+                cols += f" (+{len(op['columns']) - 3} more)"
+            lines.append(f"{i}. Select columns: [{cols}]")
+    
+    return "\n".join(lines)
+
+def add_operation(pending_operations, operation_type,
+                  sort_columns, sort_order,
+                  range_column, range_min, range_max,
+                  values_column, available_values,
+                  rename_old, rename_new,
+                  select_columns,
+                  loaded_data, selected_file):
+    """
+    Add a new operation to the pending list and update the live preview.
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return pending_operations, "No dataset selected", None, "*Select a dataset*"
+    
+    # Build the operation based on type
+    new_op = None
+    
+    if operation_type == "Sort":
+        if sort_columns:
+            new_op = {
+                'type': 'sort',
+                'columns': sort_columns,
+                'ascending': sort_order == "Ascending"
+            }
+    
+    elif operation_type == "Filter (Range)":
+        if range_column and (range_min is not None or range_max is not None):
+            new_op = {
+                'type': 'filter_range',
+                'column': range_column,
+                'min': range_min,
+                'max': range_max
+            }
+    
+    elif operation_type == "Filter (Values)":
+        if values_column and available_values:
+            # Convert string values back to original types
+            df = loaded_data[selected_file]
+            original_dtype = df[values_column].dtype
+            converted_values = available_values
+            
+            if pd.api.types.is_numeric_dtype(original_dtype):
+                try:
+                    converted_values = [
+                        float(v) if '.' in str(v) else int(v) 
+                        for v in available_values
+                    ]
+                except:
+                    pass
+            
+            new_op = {
+                'type': 'filter_values',
+                'column': values_column,
+                'values': converted_values
+            }
+    
+    elif operation_type == "Rename Column":
+        if rename_old and rename_new:
+            new_op = {
+                'type': 'rename',
+                'old_name': rename_old,
+                'new_name': rename_new
+            }
+    
+    elif operation_type == "Select Columns":
+        if select_columns:
+            new_op = {
+                'type': 'select_columns',
+                'columns': select_columns
+            }
+    
+    if new_op is None:
+        # No valid operation configured
+        summary = format_operations_summary(pending_operations)
         df = loaded_data[selected_file]
-        original_dtype = df[val_col].dtype
-        
-        if pd.api.types.is_numeric_dtype(original_dtype):
-            try:
-                val_list = [float(v) if '.' in str(v) else int(v) for v in val_list]
-            except:
-                pass
-        
-        operations_list.append({
-            'type': 'filter_values',
-            'columns': [val_col],
-            'params': {'values': val_list}
-        })
+        transformed_df, _ = apply_operations_to_df(df, pending_operations)
+        stats = f"**Original:** {len(df)} rows × {len(df.columns)} cols → **Preview:** {len(transformed_df)} rows × {len(transformed_df.columns)} cols"
+        return pending_operations, summary, transformed_df.head(20), stats
     
-    if rename_map:
-        operations_list.append({
-            'type': 'rename_columns',
-            'columns': [],
-            'params': {'rename_map': rename_map}
-        })
+    # Add the new operation
+    updated_operations = pending_operations + [new_op]
     
-    if sel_cols:
-        operations_list.append({
-            'type': 'select_columns',
-            'columns': sel_cols,
-            'params': {}
-        })
+    # Apply all operations and get preview
+    df = loaded_data[selected_file]
+    transformed_df, logs = apply_operations_to_df(df, updated_operations)
     
-    if not operations_list:
-        return "No operations selected.", None, loaded_data
+    summary = format_operations_summary(updated_operations)
+    stats = f"**Original:** {len(df)} rows × {len(df.columns)} cols → **Preview:** {len(transformed_df)} rows × {len(transformed_df.columns)} cols"
     
-    # Call the main operations function
-    return operations(loaded_data, selected_file, operations_list, save_name=custom_name, preview_only=preview_only)
+    return updated_operations, summary, transformed_df.head(20), stats
 
-def preview_operations(loaded_data, selected_file, sort_cols, sort_ord,
-                       range_col, r_min, r_max, val_col, val_list,
-                       rename_map, sel_cols, custom_name):
-    """Preview transformation without saving."""
-    return apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord,
-                                range_col, r_min, r_max, val_col, val_list,
-                                rename_map, sel_cols, custom_name, preview_only=True)
+def clear_operations(loaded_data, selected_file):
+    """Clear all pending operations and reset preview."""
+    if not loaded_data or selected_file not in loaded_data:
+        return [], "No operations added yet", None, "*Select a dataset*"
+    
+    df = loaded_data[selected_file]
+    stats = f"**Original:** {len(df)} rows × {len(df.columns)} columns"
+    
+    return [], "No operations added yet", df.head(20), stats
+
+def undo_operation(pending_operations, loaded_data, selected_file):
+    """Remove the last operation and update preview."""
+    if not loaded_data or selected_file not in loaded_data:
+        return [], "No operations added yet", None, "*Select a dataset*"
+    
+    df = loaded_data[selected_file]
+    
+    if not pending_operations:
+        stats = f"**Original:** {len(df)} rows × {len(df.columns)} columns"
+        return [], "No operations added yet", df.head(20), stats
+    
+    # Remove last operation
+    updated_operations = pending_operations[:-1]
+    
+    # Apply remaining operations
+    transformed_df, _ = apply_operations_to_df(df, updated_operations)
+    
+    summary = format_operations_summary(updated_operations)
+    stats = f"**Original:** {len(df)} rows × {len(df.columns)} cols → **Preview:** {len(transformed_df)} rows × {len(transformed_df.columns)} cols"
+    
+    return updated_operations, summary, transformed_df.head(20), stats
+
+def save_transformed_dataset(loaded_data, selected_file, pending_operations, save_name):
+    """
+    Apply all pending operations and save as a new dataset.
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return loaded_data, [], "No operations added yet", None, "*Select a dataset*", gr.Dropdown()
+    
+    if not pending_operations:
+        df = loaded_data[selected_file]
+        stats = f"**Original:** {len(df)} rows × {len(df.columns)} columns"
+        return loaded_data, [], "No operations to apply", df.head(20), stats, gr.Dropdown(choices=list(loaded_data.keys()))
+    
+    df = loaded_data[selected_file]
+    transformed_df, logs = apply_operations_to_df(df, pending_operations)
+    
+    # Determine save name
+    if save_name and save_name.strip():
+        new_name = save_name.strip()
+        if new_name in loaded_data:
+            # Add suffix if name exists
+            counter = 1
+            base_name = new_name
+            while new_name in loaded_data:
+                new_name = f"{base_name}_{counter}"
+                counter += 1
+    else:
+        new_name = f"{selected_file}_transformed"
+        counter = 1
+        while new_name in loaded_data:
+            new_name = f"{selected_file}_transformed_{counter}"
+            counter += 1
+    
+    # Save the transformed dataset
+    loaded_data[new_name] = transformed_df
+    
+    # Build success message
+    summary = f"✓ Saved as '{new_name}'\n\nApplied {len(pending_operations)} operation(s):\n"
+    summary += "\n".join(f"  • {log}" for log in logs)
+    
+    stats = f"**Saved:** {len(transformed_df)} rows × {len(transformed_df.columns)} columns"
+    
+    # Update dropdown with new dataset
+    updated_dropdown = gr.Dropdown(choices=list(loaded_data.keys()), value=new_name)
+    
+    return loaded_data, [], summary, transformed_df.head(20), stats, updated_dropdown
