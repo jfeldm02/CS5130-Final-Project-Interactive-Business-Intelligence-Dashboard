@@ -5,6 +5,7 @@ import pandas as pd
 import tempfile
 import os
 import insights
+import visualizations as viz
 
 #=========================================================================================
 # Data Upload Tab
@@ -29,10 +30,6 @@ def data_upload_pipeline(uploaded_paths):
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[]),
-                gr.Dropdown(choices=[]),
-                gr.Dropdown(choices=[]),
-                gr.Dropdown(choices=[]),
-                gr.Dropdown(choices=[]),
                 gr.Dropdown(choices=[])
             )
 
@@ -53,17 +50,13 @@ def data_upload_pipeline(uploaded_paths):
     status_msg += f"Successfully loaded: {loaded}\n"
     status_msg += f"Failed to load: {failed}"
 
-    # Return message + loaded data dict
+    # Return message + loaded data dict + dropdowns for:
+    # preview_file_dropdown, profile_file_dropdown, filter_file_dropdown
     return (status_msg, loaded_result["loaded"],
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
             gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded),
-            gr.Dropdown(choices=loaded)
+            gr.Dropdown(choices=[])
             )
 
 def profile_file(loaded_data, selected_file):
@@ -264,8 +257,182 @@ def prepare_download(loaded_data, selected_file):
     return output_path
 
 #=========================================================================================
-# Filter and Explore Tab
+# Statistics and Data Cleaning Tab - Consolidated Version
 #=========================================================================================
+
+def load_profile_and_columns(loaded_data, selected_file):
+    """
+    Load all profile information when a dataset is selected.
+    Returns all the statistics displays and populates column dropdowns.
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return (
+            "*Select a dataset to view statistics*",
+            None, None, None, None, None,
+            gr.Dropdown(choices=[]),
+            gr.Dropdown(choices=[]),
+            "Select a dataset to begin"
+        )
+    
+    df = loaded_data[selected_file]
+    profile = dp.profile(df)
+    
+    # Stats summary markdown
+    stats_summary = f"**{selected_file}**: {profile['shape'][0]:,} rows × {profile['shape'][1]} columns | {profile['duplicates']} duplicates"
+    
+    # Overall summary DataFrame
+    summary_data = {
+        "Metric": ["Rows", "Columns", "Duplicates"],
+        "Value": [profile["shape"][0], profile["shape"][1], profile["duplicates"]]
+    }
+    summary_df = pd.DataFrame(summary_data)
+    
+    # Per-column statistics DataFrame
+    col_stats_data = []
+    for col, stats in profile["describe"].items():
+        row = {"Column": col, "Nulls": profile["nulls"].get(col, 0)}
+        for stat_name, value in stats.items():
+            if isinstance(value, (int, float)):
+                row[stat_name] = round(value, 2)
+            else:
+                row[stat_name] = value
+        col_stats_data.append(row)
+    col_stats_df = pd.DataFrame(col_stats_data)
+    
+    # Data types DataFrame
+    dtype_df = pd.DataFrame({
+        "Column": df.columns,
+        "Data Type": df.dtypes.astype(str)
+    })
+    
+    # Null info DataFrame
+    null_counts = df.isnull().sum()
+    columns_with_nulls = null_counts[null_counts > 0]
+    if len(columns_with_nulls) == 0:
+        null_df = pd.DataFrame({"Status": ["No null values found"]})
+        null_column_choices = []
+    else:
+        null_df = pd.DataFrame({
+            "Column": columns_with_nulls.index,
+            "Null Count": columns_with_nulls.values,
+            "% Null": (columns_with_nulls.values / len(df) * 100).round(2)
+        })
+        null_column_choices = columns_with_nulls.index.tolist()
+    
+    # Preview
+    preview_df = df.head(10)
+    
+    # Column choices for dropdowns
+    all_columns = df.columns.tolist()
+    
+    return (
+        stats_summary,
+        summary_df,
+        col_stats_df,
+        dtype_df,
+        null_df,
+        preview_df,
+        gr.Dropdown(choices=all_columns),
+        gr.Dropdown(choices=null_column_choices),
+        "Ready for cleaning operations"
+    )
+
+def _refresh_all_stats(loaded_data, selected_file):
+    """Helper to refresh all statistics displays after a cleaning operation."""
+    return load_profile_and_columns(loaded_data, selected_file)
+
+def convert_dtype_and_refresh(loaded_data, selected_file, columns, new_dtype):
+    """Convert data types and refresh all statistics."""
+    if not loaded_data or selected_file not in loaded_data:
+        return ("No dataset selected.", loaded_data,
+                "*Select a dataset*", None, None, None, None, None,
+                gr.Dropdown(choices=[]), gr.Dropdown(choices=[]))
+    
+    if not columns:
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return ("No columns selected.",) + (loaded_data,) + stats
+    
+    try:
+        df = loaded_data[selected_file]
+        original_dtypes = {col: str(df[col].dtype) for col in columns}
+        
+        df = dp.convert_dtype(df, columns, new_dtype)
+        loaded_data[selected_file] = df
+        
+        # Build log message
+        log_lines = [f"✓ Converted {len(columns)} column(s) to {new_dtype}:"]
+        for col in columns:
+            log_lines.append(f"  • {col}: {original_dtypes[col]} → {new_dtype}")
+        log_msg = "\n".join(log_lines)
+        
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (log_msg,) + (loaded_data,) + stats[:-1] + (stats[-1],)
+    
+    except Exception as e:
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (f"Error: {str(e)}",) + (loaded_data,) + stats[:-1] + (stats[-1],)
+
+def fill_nulls_and_refresh(loaded_data, selected_file, columns, method):
+    """Fill null values and refresh all statistics."""
+    if not loaded_data or selected_file not in loaded_data:
+        return ("No dataset selected.", loaded_data,
+                "*Select a dataset*", None, None, None, None, None,
+                gr.Dropdown(choices=[]), gr.Dropdown(choices=[]))
+    
+    if not columns:
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return ("No columns selected.",) + (loaded_data,) + stats
+    
+    try:
+        df = loaded_data[selected_file]
+        
+        # Count nulls before
+        nulls_before = {col: df[col].isnull().sum() for col in columns}
+        total_before = sum(nulls_before.values())
+        
+        df = dp.fill_nulls(df, columns, method)
+        loaded_data[selected_file] = df
+        
+        # Count nulls after
+        nulls_after = {col: df[col].isnull().sum() for col in columns}
+        total_after = sum(nulls_after.values())
+        
+        # Build log message
+        log_lines = [f"✓ Filled {total_before - total_after} null values using '{method}':"]
+        for col in columns:
+            log_lines.append(f"  • {col}: {nulls_before[col]} → {nulls_after[col]}")
+        log_msg = "\n".join(log_lines)
+        
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (log_msg,) + (loaded_data,) + stats[:-1] + (stats[-1],)
+    
+    except Exception as e:
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (f"Error: {str(e)}",) + (loaded_data,) + stats[:-1] + (stats[-1],)
+
+def drop_duplicates_and_refresh(loaded_data, selected_file):
+    """Drop duplicates and refresh all statistics."""
+    if not loaded_data or selected_file not in loaded_data:
+        return ("No dataset selected.", loaded_data,
+                "*Select a dataset*", None, None, None, None, None,
+                gr.Dropdown(choices=[]), gr.Dropdown(choices=[]))
+    
+    try:
+        df = loaded_data[selected_file]
+        original_rows = len(df)
+        
+        df = dp.drop_duplicates(df)
+        loaded_data[selected_file] = df
+        
+        rows_removed = original_rows - len(df)
+        log_msg = f"✓ Removed {rows_removed} duplicate row(s)\n  {original_rows:,} → {len(df):,} rows"
+        
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (log_msg,) + (loaded_data,) + stats[:-1] + (stats[-1],)
+    
+    except Exception as e:
+        stats = _refresh_all_stats(loaded_data, selected_file)
+        return (f"Error: {str(e)}",) + (loaded_data,) + stats[:-1] + (stats[-1],)
 
 def get_column_info(loaded_data, selected_file):
     """Get column names and types for building filters."""
@@ -577,3 +744,61 @@ def save_transformed_dataset(loaded_data, selected_file, pending_operations, sav
     updated_dropdown = gr.Dropdown(choices=list(loaded_data.keys()), value=new_name)
     
     return loaded_data, [], summary, transformed_df.head(20), stats, updated_dropdown
+
+#=========================================================================================
+# Visualizations Tab
+#=========================================================================================
+
+def update_viz_columns(loaded_data, selected_file):
+    """Update column dropdowns for visualization tab."""
+    if not loaded_data or selected_file not in loaded_data:
+        return gr.Dropdown(choices=[]), gr.Dropdown(choices=[])
+    
+    df = loaded_data[selected_file]
+    columns = df.columns.tolist()
+    
+    return gr.Dropdown(choices=columns), gr.Dropdown(choices=columns)
+
+
+def generate_plot_wrapper(loaded_data, selected_file, plot_type,
+                          x_col, y_col, x_label, y_label, title,
+                          aggregation):
+    """Wrapper to generate plot from Gradio inputs."""
+    if not loaded_data or selected_file not in loaded_data:
+        return None, "No dataset selected."
+    
+    if not x_col:
+        return None, "Please select an X-axis column."
+    
+    df = loaded_data[selected_file]
+    
+    # Validate columns exist
+    if x_col not in df.columns:
+        return None, f"Column '{x_col}' not found in dataset."
+    
+    if y_col and y_col not in df.columns:
+        return None, f"Column '{y_col}' not found in dataset."
+    
+    try:
+        fig = viz.generate_plot(
+            plot_type=plot_type,
+            data=df,
+            x_col=x_col,
+            y_col=y_col if y_col else None,
+            x_label=x_label,
+            y_label=y_label,
+            title=title,
+            aggregation=aggregation
+        )
+        
+        if fig is None:
+            return None, f"Could not generate {plot_type} plot. Check that you've selected appropriate columns."
+        
+        status = f"Generated {plot_type} plot"
+        if aggregation != "None":
+            status += f" with {aggregation} aggregation"
+        
+        return fig, status
+        
+    except Exception as e:
+        return None, f"Error generating plot: {str(e)}"
