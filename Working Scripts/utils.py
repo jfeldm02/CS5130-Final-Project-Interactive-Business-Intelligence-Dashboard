@@ -411,8 +411,16 @@ def add_to_rename_queue(rename_map, old_name, new_name):
 def clear_rename_queue():
     return {}, "No renames queued"
 
-def apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord, 
-                        range_col, r_min, r_max, val_col, val_list, 
+def preview_operations(loaded_data, selected_file, sort_cols, sort_ord,
+                       range_col, r_min, r_max, val_col, val_list,
+                       rename_map, sel_cols, custom_name):
+    """Preview transformation without saving."""
+    return apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord,
+                                range_col, r_min, r_max, val_col, val_list,
+                                rename_map, sel_cols, custom_name, preview_only=True)
+
+def apply_all_operations(loaded_data, selected_file, sort_cols, sort_ord,
+                        range_col, r_min, r_max, val_col, val_list,
                         rename_map, sel_cols, custom_name, preview_only=False):
     """
     Wrapper function that builds operations list from Gradio inputs

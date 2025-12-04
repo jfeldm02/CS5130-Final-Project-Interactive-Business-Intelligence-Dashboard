@@ -476,12 +476,18 @@ def create_dashboard():
             # Apply Operations
             with gr.Row():
                 with gr.Column(scale=1):
+                    preview_operations_btn = gr.Button(
+                        "Preview Transformation",
+                        variant="secondary",
+                        size="lg"
+                    )
+
                     apply_operations_btn = gr.Button(
-                        "Apply Operations & Save", 
+                        "Apply Operations & Save",
                         variant="primary",
                         size="lg"
                     )
-                    
+
                     operations_status = gr.Textbox(
                         label="Operations Status",
                         interactive=False,
@@ -587,11 +593,19 @@ def create_dashboard():
             outputs=[rename_queue, rename_queue_display]
         )
 
-        apply_operations_btn.click(
-            fn=utils.apply_all_operations,  # Fixed function name
+        preview_operations_btn.click(
+            fn=utils.preview_operations,
             inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
                     range_column, range_min, range_max, values_column, available_values,
-                    rename_queue, select_columns, save_config_name], 
+                    rename_queue, select_columns, save_config_name],
+            outputs=[operations_status, operations_preview, loaded_data]
+        )
+
+        apply_operations_btn.click(
+            fn=utils.apply_all_operations,
+            inputs=[loaded_data, filter_file_dropdown, sort_columns, sort_order,
+                    range_column, range_min, range_max, values_column, available_values,
+                    rename_queue, select_columns, save_config_name],
             outputs=[operations_status, operations_preview, loaded_data]
         )
 
