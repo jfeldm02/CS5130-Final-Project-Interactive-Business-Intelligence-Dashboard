@@ -1,5 +1,47 @@
 import plotly.express as px
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+#=========================================================================================
+# Statistics and Data Preprocessing Tab 
+#=========================================================================================
+
+def correlation_matrix(loaded_data, selected_file):
+    """
+    Produces a correlation heatmap. 
+
+    Inputs:
+        loaded_data: successfully loaded data
+        selected_file: specific file
+    
+    Returns:
+        fig: Correlation heatmap figure
+    """
+    if not loaded_data or selected_file not in loaded_data:
+        return None
+    
+    df = loaded_data[selected_file]
+    
+    # Select only numeric columns
+    numeric_df = df.select_dtypes(include='number')
+    
+    if numeric_df.empty or len(numeric_df.columns) < 2:
+        return None
+    
+    # Calculate correlation matrix
+    corr_matrix = numeric_df.corr().round(3)
+    
+    # Create figure and plot heatmap
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
+                vmin=-1, vmax=1, ax=ax)
+    ax.set_title(f"Correlation Matrix: {selected_file}")
+    plt.tight_layout()
+    
+    return fig
+
 
 PLOT_TYPES = ["Scatter", "Line", "Bar", "Pie", "Box", "Histogram", "Heatmap"]
 AGGREGATION_METHODS = ["None", "Sum", "Mean", "Count", "Median", "Min", "Max"]

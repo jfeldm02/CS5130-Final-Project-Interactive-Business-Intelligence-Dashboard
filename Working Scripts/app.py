@@ -3,6 +3,7 @@ import pandas as pd
 
 import data_processor as dp
 import utils
+import visualizations as viz
 
 def create_dashboard():
     with gr.Blocks(theme=gr.themes.Soft()) as demo:
@@ -203,6 +204,13 @@ def create_dashboard():
                         interactive=False,
                         wrap=True
                     )
+                    
+                    gr.Markdown("### Correlation Matrix")
+                    gr.Markdown("*Shows pairwise correlations between numeric columns only*")
+                    
+                    generate_corr_btn = gr.Button("Generate Correlation Matrix", variant="secondary")
+                    
+                    correlation_output = gr.Plot(label="Correlation Matrix")
             
         with gr.Tab("Filter & Explore"):
             gr.Markdown("""
@@ -541,7 +549,7 @@ def create_dashboard():
                     )
                     
                     anomaly_threshold_slider = gr.Slider(
-                        label="Anomaly Threshold (σ)",
+                        label="Anomaly Threshold (Ïƒ)",
                         minimum=1.5,
                         maximum=4.0,
                         value=2.5,
@@ -550,9 +558,9 @@ def create_dashboard():
                     
                     gr.Markdown("""
                     **Anomaly Threshold Guide:**
-                    - 2.0σ: More sensitive (catches ~5% of data)
-                    - 2.5σ: Balanced (catches ~1% of data)
-                    - 3.0σ: Conservative (catches ~0.3% of data)
+                    - 2.0Ïƒ: More sensitive (catches ~5% of data)
+                    - 2.5Ïƒ: Balanced (catches ~1% of data)
+                    - 3.0Ïƒ: Conservative (catches ~0.3% of data)
                     """)
             
             with gr.Row():
@@ -730,6 +738,13 @@ def create_dashboard():
             fn=utils.prepare_download,
             inputs=[loaded_data, profile_file_dropdown],
             outputs=[download_output]
+        )
+        
+        # Correlation matrix
+        generate_corr_btn.click(
+            fn=viz.correlation_matrix,
+            inputs=[loaded_data, profile_file_dropdown],
+            outputs=[correlation_output]
         )
         
         # ==========================================
