@@ -1,1 +1,19 @@
-kaleido-0.2.1
+# Interactive Business Intelligence Dashboard
+# CS5130 Final Project - Justin Feldman
+
+# Core Framework
+gradio>=4.0.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization
+plotly>=5.18.0
+kaleido>=0.2.1  # Required for plotly image export (png, jpg, svg, pdf)
+
+# File Format Support
+openpyxl>=3.1.0      # Excel (.xlsx) support
+xlrd>=2.0.0          # Legacy Excel (.xls) support
+pyarrow>=14.0.0      # Parquet and Feather support
+tables>=3.8.0        # HDF5 (.h5, .hdf5) support
